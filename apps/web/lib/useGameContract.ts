@@ -130,7 +130,7 @@ export function useGameContract() {
     } finally {
       setIsTransacting(false);
     }
-  }, [address, isConnected, refetchBalance, sendTransactionAsync]); // Removed isTransacting to avoid circular dependency
+  }, [address, isConnected, refetchBalance, sendTransactionAsync, isTransacting]);
 
   const payoutWin = useCallback(async (winAmount: number, gameType: string) => {
     if (!address || !isConnected) {

@@ -54,12 +54,19 @@ const nextConfig = {
       };
     }
 
+    // Fix WalletConnect pino-pretty issue
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'pino-pretty': false,
+    };
+
     // Optimize for Web3 libraries
     config.externals = config.externals || [];
     if (isServer) {
       config.externals.push({
         bufferutil: 'bufferutil',
         'utf-8-validate': 'utf-8-validate',
+        'pino-pretty': 'pino-pretty',
       });
     }
 
