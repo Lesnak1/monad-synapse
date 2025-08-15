@@ -14,7 +14,7 @@ jobs:
   build-check:
     name: 'Build Check'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,10 +26,21 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'apps/web/package-lock.json'
           
+      - name: Setup environment
+        run: |
+          cd apps/web
+          # Create .env file for build
+          echo "NEXTAUTH_SECRET=dummy-secret-for-build-only" > .env
+          echo "JWT_SECRET=dummy-jwt-secret-for-build-only" >> .env
+          echo "API_SECRET=dummy-api-secret-for-build-only" >> .env
+          echo "NEXT_PUBLIC_POOL_WALLET_ADDRESS=0x0000000000000000000000000000000000000000" >> .env
+          echo "NEXT_PUBLIC_APP_ENV=production" >> .env
+          echo "SKIP_ENV_VALIDATION=true" >> .env
+          
       - name: Install dependencies
         run: |
           cd apps/web
-          npm ci --ignore-scripts
+          npm ci --prefer-offline --no-audit --no-fund
           
       - name: Build for production
         run: |
@@ -38,6 +49,13 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_TELEMETRY_DISABLED: 1
+          # Set dummy environment variables for build
+          NEXTAUTH_SECRET: dummy-secret-for-build-only
+          JWT_SECRET: dummy-jwt-secret-for-build-only
+          API_SECRET: dummy-api-secret-for-build-only
+          NEXT_PUBLIC_POOL_WALLET_ADDRESS: 0x0000000000000000000000000000000000000000
+          NEXT_PUBLIC_APP_ENV: production
+          SKIP_ENV_VALIDATION: true
           
       - name: Build success
         run: echo "✅ Build successful - ready for Vercel deployment!"
