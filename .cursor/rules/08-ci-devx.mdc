@@ -1,0 +1,18 @@
+---
+alwaysApply: true
+description: CI, DevX, lint, format, versioning and contribution workflow.
+---
+
+# CI & DevX Rules
+
+Referanslar: [TECH_STACK](mdc:docs/TECH_STACK.md), [ROADMAP](mdc:docs/ROADMAP.md)
+
+- **Node/TS**: Node 20.x, TS 5.x; `npm` paket yöneticisi
+- **Format/Lint**: Prettier + ESLint (TS strict), Solhint + prettier-plugin-solidity
+- **Scripts**: `lint`, `typecheck`, `test`, `build`, `dev` komutlarını standartlaştırın
+- **CI**: GitHub Actions — lint, typecheck, test, build aşamaları; raporları artifact olarak yayınlayın
+- **Commits**: Conventional Commits; değişim günlüğü otomasyonu opsiyonel
+- **Branch**: `main` korumalı; feature branch → PR → review → squash merge
+- **Sürümleme**: SemVer; release notları ve ROADMAP güncellemesi
+- **Çoklu Paket**: Monorepo (opsiyonel); çalışma alanı betikleri ile hızlandırma
+

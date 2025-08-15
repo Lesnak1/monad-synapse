@@ -1,0 +1,95 @@
+# Development Dockerfile for Monad Synapse Casino Platform
+# Optimized for development workflow with hot reload and debugging tools
+
+FROM node:20-alpine
+
+LABEL maintainer="Monad Synapse Team"
+LABEL description="Monad Synapse Casino Platform - Development Image"
+LABEL environment="development"
+
+WORKDIR /app
+
+# Install system dependencies and development tools
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++ \
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    htop \
+    strace \
+    tcpdump \
+    netcat-openbsd \
+    bash \
+    zsh \
+    fish && \
+    rm -rf /var/cache/apk/*
+
+# Install global development tools
+RUN npm install -g \
+    nodemon \
+    pm2 \
+    @next/bundle-analyzer \
+    lighthouse \
+    npm-check-updates
+
+# Create non-root user for development
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --shell /bin/bash nextjs
+
+# Copy package files
+COPY --chown=nextjs:nodejs package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm ci --include=dev --ignore-scripts && \
+    npm cache clean --force
+
+# Set development environment
+ENV NODE_ENV=development
+ENV NEXT_PUBLIC_APP_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV WATCHPACK_POLLING=true
+ENV TURBO_DEBUG=1
+
+# Copy source code
+COPY --chown=nextjs:nodejs . .
+
+# Set proper permissions
+RUN chown -R nextjs:nodejs /app
+RUN chmod -R 755 /app
+
+# Create directories for development
+RUN mkdir -p /app/.next /app/coverage /app/logs && \
+    chown -R nextjs:nodejs /app/.next /app/coverage /app/logs
+
+# Switch to non-root user
+USER nextjs
+
+# Create development shell configuration
+RUN echo 'alias ll="ls -la"' >> ~/.bashrc && \
+    echo 'alias la="ls -A"' >> ~/.bashrc && \
+    echo 'alias l="ls -CF"' >> ~/.bashrc && \
+    echo 'export PATH="$PATH:/app/node_modules/.bin"' >> ~/.bashrc
+
+# Health check for development
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Expose ports
+EXPOSE 3000 9229 9230
+
+# Development startup script
+COPY --chown=nextjs:nodejs scripts/dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
+RUN chmod +x /usr/local/bin/dev-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
+
+# Default command for development with hot reload
+CMD ["npm", "run", "dev"]

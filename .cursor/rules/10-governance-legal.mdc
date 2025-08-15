@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+description: Governance, compliance, and legal framing for a simulation/education-focused app.
+---
+
+# Governance & Legal Rules
+
+Referanslar: [PRD](mdc:docs/PRD.md)
+
+- **Amaç**: Eğitim/simülasyon; finansal tavsiye değildir
+- **Regülasyon Duyarlılığı**: Prediction market fonksiyonları v1’da sınırlı; tipping/points gibi mekanikler opsiyonel ve küçük tutarlı
+- **Topluluk**: Governance (DAO) planı ileride; şimdilik açık AMA ve issue‑tabanlı geri bildirim
+- **Şeffaflık**: On‑chain olaylar ve IPFS CID’leri ile doğrulanabilirlik
+- **Gizlilik**: Kullanıcı verisi toplanmaz; anonim telemetri
+

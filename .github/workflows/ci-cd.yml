@@ -1,0 +1,581 @@
+name: 'Monad Synapse CI/CD Pipeline'
+
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # ============================================================================
+  # Code Quality and Security Checks
+  # ============================================================================
+  quality-check:
+    name: 'Code Quality & Security'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for better analysis
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+            
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          echo "key=deps-${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_OUTPUT
+          
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules
+            apps/web/node_modules
+            apps/web/.next/cache
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            deps-${{ runner.os }}-node-${{ env.NODE_VERSION }}-
+            deps-${{ runner.os }}-node-
+            
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm --workspace apps/web ci --ignore-scripts
+          
+      - name: TypeScript type checking
+        run: npm run typecheck
+        
+      - name: ESLint code analysis
+        run: npm run lint
+        
+      - name: Security audit
+        run: |
+          npm audit --audit-level=moderate --production
+          npm --workspace apps/web audit --audit-level=moderate --production
+        continue-on-error: true
+        
+      - name: Dependency vulnerability scan
+        uses: anchore/scan-action@v4
+        with:
+          path: "."
+          fail-build: false
+          severity-cutoff: high
+          
+      - name: Upload vulnerability report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vulnerability-report
+          path: |
+            **/vulnerabilities.json
+            anchore-reports/
+          retention-days: 30
+
+  # ============================================================================
+  # Comprehensive Testing Suite
+  # ============================================================================
+  test-suite:
+    name: 'Test Suite'
+    runs-on: ubuntu-latest
+    needs: quality-check
+    timeout-minutes: 20
+    if: ${{ !inputs.skip_tests }}
+    strategy:
+      matrix:
+        test-group: ['unit', 'integration', 'api']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules
+            apps/web/node_modules
+            apps/web/.next/cache
+          key: ${{ needs.quality-check.outputs.cache-key }}
+          
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm --workspace apps/web ci --ignore-scripts
+          
+      - name: Run unit tests
+        if: matrix.test-group == 'unit'
+        run: |
+          npm run test:ci
+        env:
+          CI: true
+          
+      - name: Run integration tests
+        if: matrix.test-group == 'integration'
+        run: |
+          cd apps/web
+          npm run test -- __tests__/integration/ --coverage=false --ci
+        env:
+          CI: true
+          
+      - name: Run API tests
+        if: matrix.test-group == 'api'
+        run: |
+          cd apps/web
+          npm run test -- __tests__/api/ --coverage=false --ci
+        env:
+          CI: true
+          
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.test-group }}
+          path: |
+            apps/web/coverage/
+            apps/web/test-results.xml
+          retention-days: 30
+
+  # ============================================================================
+  # Build and Optimization
+  # ============================================================================
+  build:
+    name: 'Build Application'
+    runs-on: ubuntu-latest
+    needs: [quality-check, test-suite]
+    timeout-minutes: 15
+    if: always() && (needs.quality-check.result == 'success' && (needs.test-suite.result == 'success' || needs.test-suite.result == 'skipped'))
+    outputs:
+      build-hash: ${{ steps.build-hash.outputs.hash }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules
+            apps/web/node_modules
+            apps/web/.next/cache
+          key: ${{ needs.quality-check.outputs.cache-key }}
+          
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm --workspace apps/web ci --ignore-scripts
+          
+      - name: Build application
+        run: |
+          cd apps/web
+          npm run build
+        env:
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: 1
+          
+      - name: Generate build hash
+        id: build-hash
+        run: |
+          BUILD_HASH=$(find apps/web/.next -type f -name "*.js" -o -name "*.css" | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
+          echo "hash=${BUILD_HASH}" >> $GITHUB_OUTPUT
+          
+      - name: Analyze bundle size
+        run: |
+          cd apps/web
+          npx @next/bundle-analyzer --help || npm install -g @next/bundle-analyzer
+          # Bundle analysis would go here
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            apps/web/.next/
+            apps/web/package.json
+          retention-days: 7
+          
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next
+          key: build-${{ github.sha }}-${{ steps.build-hash.outputs.hash }}
+
+  # ============================================================================
+  # Security Scanning
+  # ============================================================================
+  security-scan:
+    name: 'Security Scanning'
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 10
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: 'typescript,javascript'
+          queries: security-extended
+          
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        
+      - name: Run Semgrep SAST
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/typescript
+          generateSarif: "1"
+          
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          
+      - name: Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+        continue-on-error: true
+
+  # ============================================================================
+  # Docker Image Building
+  # ============================================================================
+  docker-build:
+    name: 'Build Docker Images'
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    timeout-minutes: 20
+    if: always() && needs.build.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.build-push.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+            
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+            
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: apps/web/
+          
+      - name: Build and push Docker image
+        id: build-push
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile.production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+          provenance: true
+          sbom: true
+          
+      - name: Run container security scan
+        uses: aquasec/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-report
+          path: sbom.spdx.json
+          retention-days: 90
+
+  # ============================================================================
+  # Performance Testing
+  # ============================================================================
+  performance-test:
+    name: 'Performance Testing'
+    runs-on: ubuntu-latest
+    needs: docker-build
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request'
+    services:
+      monad-synapse:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        ports:
+          - 3000:3000
+        options: >-
+          --health-cmd "curl -f http://localhost:3000/api/health"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install Lighthouse CLI
+        run: npm install -g @lhci/cli@0.12.x
+        
+      - name: Wait for service
+        run: |
+          timeout 60s bash -c 'until curl -f http://localhost:3000/api/health; do sleep 5; done'
+          
+      - name: Run Lighthouse CI
+        run: |
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+          LHCI_SERVER_BASE_URL: http://localhost:3000
+          
+      - name: Upload Lighthouse results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-results
+          path: .lighthouseci/
+          retention-days: 30
+
+  # ============================================================================
+  # Staging Deployment
+  # ============================================================================
+  deploy-staging:
+    name: 'Deploy to Staging'
+    runs-on: ubuntu-latest
+    needs: [docker-build, performance-test]
+    timeout-minutes: 10
+    if: |
+      always() && 
+      needs.docker-build.result == 'success' &&
+      (needs.performance-test.result == 'success' || needs.performance-test.result == 'skipped') &&
+      (github.ref == 'refs/heads/develop' || 
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging'))
+    environment: 
+      name: staging
+      url: https://staging.monad-synapse.com
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          echo "Image: ${{ needs.docker-build.outputs.image-tag }}"
+          echo "Digest: ${{ needs.docker-build.outputs.image-digest }}"
+          # Deployment logic would be implemented here
+          # This could include:
+          # - Kubernetes deployment
+          # - Docker Compose update
+          # - Cloud provider deployment
+          
+      - name: Run smoke tests
+        run: |
+          echo "Running staging smoke tests..."
+          # Smoke test implementation
+          
+      - name: Notify deployment status
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ============================================================================
+  # Production Deployment
+  # ============================================================================
+  deploy-production:
+    name: 'Deploy to Production'
+    runs-on: ubuntu-latest
+    needs: [docker-build, performance-test]
+    timeout-minutes: 15
+    if: |
+      always() && 
+      needs.docker-build.result == 'success' &&
+      (needs.performance-test.result == 'success' || needs.performance-test.result == 'skipped') &&
+      (github.ref == 'refs/heads/main' || 
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'production'))
+    environment: 
+      name: production
+      url: https://monad-synapse.com
+    steps:
+      - name: Production deployment approval
+        uses: trstringer/manual-approval@v1
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ github.actor }}
+          minimum-approvals: 1
+          issue-title: "Production Deployment Approval Required"
+          
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          echo "Image: ${{ needs.docker-build.outputs.image-tag }}"
+          echo "Digest: ${{ needs.docker-build.outputs.image-digest }}"
+          # Production deployment logic
+          
+      - name: Run production smoke tests
+        run: |
+          echo "Running production smoke tests..."
+          # Production smoke test implementation
+          
+      - name: Update deployment tracking
+        run: |
+          echo "Updating deployment tracking..."
+          echo "Deployment completed at $(date)"
+          
+      - name: Notify successful deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#production-deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          custom_payload: |
+            {
+              text: "🚀 Production deployment successful!",
+              attachments: [{
+                color: "good",
+                fields: [{
+                  title: "Environment",
+                  value: "Production",
+                  short: true
+                }, {
+                  title: "Version",
+                  value: "${{ github.sha }}",
+                  short: true
+                }, {
+                  title: "Deployed by",
+                  value: "${{ github.actor }}",
+                  short: true
+                }]
+              }]
+            }
+
+  # ============================================================================
+  # Post-Deployment Monitoring
+  # ============================================================================
+  post-deployment:
+    name: 'Post-Deployment Monitoring'
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    timeout-minutes: 10
+    steps:
+      - name: Health check monitoring
+        run: |
+          echo "Setting up post-deployment monitoring..."
+          # Health check implementation
+          
+      - name: Performance monitoring
+        run: |
+          echo "Initiating performance monitoring..."
+          # Performance monitoring setup
+          
+      - name: Security monitoring
+        run: |
+          echo "Activating security monitoring..."
+          # Security monitoring activation

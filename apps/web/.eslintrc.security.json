@@ -1,0 +1,58 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    "plugin:security/recommended-legacy",
+    "plugin:no-secrets/recommended"
+  ],
+  "plugins": [
+    "security",
+    "no-secrets"
+  ],
+  "rules": {
+    "security/detect-object-injection": "error",
+    "security/detect-non-literal-regexp": "warn",
+    "security/detect-non-literal-require": "error",
+    "security/detect-possible-timing-attacks": "error",
+    "security/detect-pseudoRandomBytes": "error",
+    "security/detect-unsafe-regex": "error",
+    "security/detect-buffer-noassert": "error",
+    "security/detect-child-process": "error",
+    "security/detect-disable-mustache-escape": "error",
+    "security/detect-eval-with-expression": "error",
+    "security/detect-no-csrf-before-method-override": "error",
+    "security/detect-non-literal-fs-filename": "warn",
+    "security/detect-new-buffer": "error",
+    "no-secrets/no-secrets": ["error", {
+      "tolerance": 4.2,
+      "additionalDelimiters": ["-", "_", "\\"],
+      "ignoreContent": [
+        "^\\$\\{",
+        "^process\\.env\\.",
+        "^[A-Z_]+$",
+        "test",
+        "mock",
+        "fixture",
+        "example"
+      ],
+      "ignoreModules": true,
+      "ignoreIdentifiers": [
+        "className",
+        "testId",
+        "placeholder",
+        "alt",
+        "title"
+      ]
+    }],
+    "react/no-unescaped-entities": "off",
+    "@next/next/no-img-element": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**/*"],
+      "rules": {
+        "security/detect-object-injection": "off",
+        "no-secrets/no-secrets": "off"
+      }
+    }
+  ]
+}

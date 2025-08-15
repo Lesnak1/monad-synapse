@@ -1,0 +1,24 @@
+---
+alwaysApply: true
+description: Architectural structure, responsibilities, and data flow for Monad Synapse.
+---
+
+# Architecture & Structure
+
+Proje bileşenleri ve görevleri: [MDC](mdc:docs/MDC.md), [TECH_STACK](mdc:docs/TECH_STACK.md).
+
+- **Dizinler**
+  - `apps/web`: Next.js 14 (App Router), TS, Tailwind, shadcn/ui, wagmi/viem, RainbowKit
+  - `services/oracle-gw`: Fastify REST + WS, Chainlink abonelikleri, normalizasyon, TWAP
+  - `services/ai`: HF Inference proxy, featurization, metrikler (MAPE/RMSE)
+  - `contracts`: Foundry, Solidity ^0.8.24, OZ, Chainlink interfaces
+- **Akış**: Chainlink → Oracle Gateway → AI Service → Frontend → Contracts → IPFS
+- **İlkeler**
+  - Durumsal bilgiyi tek yerde tutun; feed adresleri `DataRegistry`/konfig üzerinden sağlanmalı.
+  - Ağ, feed, model ve parametreleri env/konfigten alın; koda sabitlemeyin.
+  - WS yayınları idempotent; `request-id` ile korele edin.
+  - Monolitik başlayın, plugin‑vari modülerleşmeye hazırlıklı olun.
+- **Değişiklik Disiplini**
+  - Mimari karar değişince [MDC](mdc:docs/MDC.md) ve [PRD](mdc:docs/PRD.md) güncellensin.
+  - Breaking changes için migration/adım planı yazılsın.
+

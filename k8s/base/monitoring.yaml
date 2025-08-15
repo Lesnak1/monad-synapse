@@ -1,0 +1,401 @@
+# Prometheus monitoring configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels:
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'monad-synapse'
+        environment: '${ENVIRONMENT}'
+    
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+    
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:9093
+    
+    scrape_configs:
+    - job_name: 'monad-synapse-app'
+      static_configs:
+      - targets: ['monad-synapse-metrics:3000']
+      metrics_path: '/api/metrics'
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      honor_labels: true
+      
+    - job_name: 'nginx-exporter'
+      static_configs:
+      - targets: ['nginx-exporter:9113']
+      scrape_interval: 15s
+      
+    - job_name: 'node-exporter'
+      static_configs:
+      - targets: ['node-exporter:9100']
+      scrape_interval: 15s
+      
+    - job_name: 'blackbox-exporter'
+      static_configs:
+      - targets: ['blackbox-exporter:9115']
+      scrape_interval: 30s
+      
+    - job_name: 'blackbox-http'
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+      static_configs:
+      - targets:
+        - https://monad-synapse.com
+        - https://monad-synapse.com/api/health
+      relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  alert_rules.yml: |
+    groups:
+    - name: monad_synapse_alerts
+      rules:
+      # Application Health Alerts
+      - alert: ApplicationDown
+        expr: up{job="monad-synapse-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Monad Synapse application is down"
+          description: "The Monad Synapse application has been down for more than 1 minute."
+          
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes."
+          
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time"
+          description: "95th percentile response time is {{ $value }}s for the last 5 minutes."
+          
+      # Resource Alerts
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / (1024*1024*1024) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}GB."
+          
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }}."
+          
+      # Business Logic Alerts
+      - alert: GameResultAnomalies
+        expr: rate(game_results_total{result="loss"}[10m]) < 0.4 or rate(game_results_total{result="loss"}[10m]) > 0.8
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Game result anomalies detected"
+          description: "Game loss rate is {{ $value | humanizePercentage }}, which is outside expected range."
+          
+      - alert: UnusualBettingVolume
+        expr: rate(bets_total[5m]) > 1000 or rate(bets_total[5m]) < 10
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual betting volume"
+          description: "Betting volume is {{ $value }} bets/second."
+          
+      - alert: WalletBalanceAlert
+        expr: wallet_balance_total < 100
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low wallet balance"
+          description: "Wallet balance is {{ $value }} tokens."
+          
+      # Security Alerts  
+      - alert: HighFailedAuthRate
+        expr: rate(auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failures: {{ $value }} per second."
+          
+      - alert: SuspiciousActivity
+        expr: rate(suspicious_activity_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Suspicious activity events: {{ $value }} per second."
+
+---
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  labels:
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: monitoring
+data:
+  monad-synapse-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Monad Synapse Casino Platform",
+        "tags": ["monad", "synapse", "casino", "web3"],
+        "style": "dark",
+        "timezone": "UTC",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Application Health",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=\"monad-synapse-app\"}",
+                "legendFormat": "Application Status"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [
+                  {"options": {"0": {"text": "DOWN"}}, "type": "value"},
+                  {"options": {"1": {"text": "UP"}}, "type": "value"}
+                ]
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total[5m])",
+                "legendFormat": "Requests/sec"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Response Time",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "50th percentile"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "95th percentile"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+                "legendFormat": "5xx errors/sec"
+              },
+              {
+                "expr": "rate(http_requests_total{status=~\"4..\"}[5m])",
+                "legendFormat": "4xx errors/sec"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "Game Metrics",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(game_results_total[5m])",
+                "legendFormat": "Games played/sec"
+              },
+              {
+                "expr": "rate(bets_total[5m])",
+                "legendFormat": "Bets placed/sec"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Wallet Balance",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "wallet_balance_total",
+                "legendFormat": "Wallet Balance"
+              }
+            ]
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "10s"
+      }
+    }
+---
+# Alert Manager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  labels:
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: alerting
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+      smtp_from: 'alerts@monad-synapse.com'
+      slack_api_url: '${SLACK_WEBHOOK_URL}'
+      
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'default'
+      routes:
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+        
+    receivers:
+    - name: 'default'
+      slack_configs:
+      - channel: '#alerts'
+        title: 'Monad Synapse Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        
+    - name: 'critical-alerts'
+      slack_configs:
+      - channel: '#critical-alerts'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+      email_configs:
+      - to: '${CRITICAL_ALERT_EMAIL}'
+        subject: 'CRITICAL: Monad Synapse Alert'
+        body: |
+          Alert: {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          Description: {{ .Annotations.description }}
+          {{ end }}
+          
+    - name: 'warning-alerts'
+      slack_configs:
+      - channel: '#warnings'
+        title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'cluster', 'service']
+---
+# Fluent Bit Configuration for Log Aggregation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  labels:
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: logging
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        
+    [INPUT]
+        Name              tail
+        Path              /var/log/app/*.log
+        Parser            json
+        Tag               app.*
+        Refresh_Interval  5
+        
+    [INPUT]
+        Name              tail
+        Path              /var/log/nginx/*.log
+        Parser            nginx
+        Tag               nginx.*
+        Refresh_Interval  5
+        
+    [FILTER]
+        Name    kubernetes
+        Match   *
+        Kube_URL https://kubernetes.default.svc:443
+        Merge_Log On
+        Keep_Log Off
+        
+    [OUTPUT]
+        Name  es
+        Match *
+        Host  ${ELASTICSEARCH_HOST}
+        Port  ${ELASTICSEARCH_PORT}
+        Index monad-synapse
+        Type  _doc
+        
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+        
+    [PARSER]
+        Name        nginx
+        Format      regex
+        Regex       ^(?<remote>[^ ]*) (?<host>[^ ]*) (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^\"]*?)(?: +\S*)?)?" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)")?$
+        Time_Key    time
+        Time_Format %d/%b/%Y:%H:%M:%S %z

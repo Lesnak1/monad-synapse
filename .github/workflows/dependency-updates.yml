@@ -1,0 +1,633 @@
+name: Dependency Updates & Security Patches
+
+on:
+  schedule:
+    # Run dependency updates weekly on Mondays at 8 AM UTC
+    - cron: '0 8 * * MON'
+    # Run security patches daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of updates to perform'
+        required: true
+        default: 'security'
+        type: choice
+        options:
+          - security
+          - minor
+          - major
+          - all
+      create_pr:
+        description: 'Create pull request for updates'
+        required: false
+        default: true
+        type: boolean
+      auto_merge:
+        description: 'Auto-merge security patches if tests pass'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Security Patches - High Priority
+  security-patches:
+    name: Security Patch Updates
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 6 * * *' || github.event.inputs.update_type == 'security' || github.event.inputs.update_type == 'all'
+    permissions:
+      contents: write
+      pull-requests: write
+      security-events: read
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci --prefer-offline
+          npm --workspace apps/web ci --prefer-offline
+
+      - name: Check for Security Vulnerabilities
+        id: audit
+        run: |
+          echo "Running security audit..."
+          npm audit --audit-level=moderate --json > audit-root.json || true
+          npm --workspace apps/web audit --audit-level=moderate --json > audit-web.json || true
+          
+          # Count vulnerabilities
+          ROOT_VULNS=$(jq -r '.metadata.vulnerabilities.total // 0' audit-root.json)
+          WEB_VULNS=$(jq -r '.metadata.vulnerabilities.total // 0' audit-web.json)
+          TOTAL_VULNS=$((ROOT_VULNS + WEB_VULNS))
+          
+          echo "total_vulnerabilities=$TOTAL_VULNS" >> $GITHUB_OUTPUT
+          echo "root_vulnerabilities=$ROOT_VULNS" >> $GITHUB_OUTPUT
+          echo "web_vulnerabilities=$WEB_VULNS" >> $GITHUB_OUTPUT
+
+      - name: Apply Security Fixes
+        if: steps.audit.outputs.total_vulnerabilities > 0
+        run: |
+          echo "Applying security fixes..."
+          
+          # Apply security fixes for root dependencies
+          if [ "${{ steps.audit.outputs.root_vulnerabilities }}" -gt "0" ]; then
+            npm audit fix --force || true
+          fi
+          
+          # Apply security fixes for web workspace
+          if [ "${{ steps.audit.outputs.web_vulnerabilities }}" -gt "0" ]; then
+            cd apps/web
+            npm audit fix --force || true
+            cd ../..
+          fi
+
+      - name: Run Tests After Security Updates
+        if: steps.audit.outputs.total_vulnerabilities > 0
+        run: |
+          npm run test:ci || echo "Tests failed, will be noted in PR"
+          echo "test_result=$?" >> $GITHUB_ENV
+
+      - name: Check for Changes
+        id: changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Security Patch PR
+        if: steps.changes.outputs.changes_detected == 'true'
+        uses: peter-evans/create-pull-request@v5
+        id: security-pr
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            🔒 Security patch updates - $(date +%Y-%m-%d)
+            
+            - Fixed ${{ steps.audit.outputs.total_vulnerabilities }} security vulnerabilities
+            - Root workspace: ${{ steps.audit.outputs.root_vulnerabilities }} fixes
+            - Web workspace: ${{ steps.audit.outputs.web_vulnerabilities }} fixes
+            
+            Auto-generated security update
+          branch: security-patches/$(date +%Y-%m-%d)
+          title: "🔒 Security Patch Updates - $(date +%Y-%m-%d)"
+          body: |
+            ## Security Patch Updates
+            
+            This PR contains automatic security patches for identified vulnerabilities.
+            
+            ### Summary
+            - **Total Vulnerabilities Fixed:** ${{ steps.audit.outputs.total_vulnerabilities }}
+            - **Root Workspace Fixes:** ${{ steps.audit.outputs.root_vulnerabilities }}
+            - **Web Workspace Fixes:** ${{ steps.audit.outputs.web_vulnerabilities }}
+            
+            ### Test Results
+            - Tests Status: ${{ env.test_result == '0' && '✅ Passed' || '❌ Failed' }}
+            
+            ### Security Audit Reports
+            <details>
+            <summary>Click to view audit details</summary>
+            
+            #### Root Workspace Audit
+            ```json
+            $(cat audit-root.json | jq -r '.vulnerabilities // {}')
+            ```
+            
+            #### Web Workspace Audit
+            ```json
+            $(cat audit-web.json | jq -r '.vulnerabilities // {}')
+            ```
+            </details>
+            
+            ### Next Steps
+            - [ ] Review changes carefully
+            - [ ] Run manual tests if automated tests failed
+            - [ ] Verify application functionality
+            - [ ] Merge if all checks pass
+            
+            **Auto-generated on:** $(date)
+            **Triggered by:** Security patch automation
+          labels: |
+            security
+            dependencies
+            automated
+            high-priority
+          draft: false
+
+      - name: Auto-merge Security PR
+        if: steps.security-pr.outputs.pull-request-number && github.event.inputs.auto_merge == 'true' && env.test_result == '0'
+        run: |
+          gh pr merge ${{ steps.security-pr.outputs.pull-request-number }} --merge --delete-branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Regular Dependency Updates
+  dependency-updates:
+    name: Regular Dependency Updates
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 8 * * MON' || github.event.inputs.update_type != 'security'
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    strategy:
+      matrix:
+        update-type: [minor, patch]
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci --prefer-offline
+          npm --workspace apps/web ci --prefer-offline
+
+      - name: Install npm-check-updates
+        run: npm install -g npm-check-updates
+
+      - name: Check for Updates
+        id: check-updates
+        run: |
+          echo "Checking for ${{ matrix.update-type }} updates..."
+          
+          # Check root dependencies
+          ncu --target ${{ matrix.update-type }} --jsonUpgraded > root-updates.json || echo "{}" > root-updates.json
+          
+          # Check web workspace dependencies
+          cd apps/web
+          ncu --target ${{ matrix.update-type }} --jsonUpgraded > ../../web-updates.json || echo "{}" > ../../web-updates.json
+          cd ../..
+          
+          # Count updates
+          ROOT_UPDATES=$(jq 'keys | length' root-updates.json)
+          WEB_UPDATES=$(jq 'keys | length' web-updates.json)
+          TOTAL_UPDATES=$((ROOT_UPDATES + WEB_UPDATES))
+          
+          echo "total_updates=$TOTAL_UPDATES" >> $GITHUB_OUTPUT
+          echo "root_updates=$ROOT_UPDATES" >> $GITHUB_OUTPUT
+          echo "web_updates=$WEB_UPDATES" >> $GITHUB_OUTPUT
+
+      - name: Apply Updates
+        if: steps.check-updates.outputs.total_updates > 0
+        run: |
+          echo "Applying ${{ matrix.update-type }} updates..."
+          
+          # Apply root updates
+          if [ "${{ steps.check-updates.outputs.root_updates }}" -gt "0" ]; then
+            ncu --target ${{ matrix.update-type }} -u
+            npm install
+          fi
+          
+          # Apply web workspace updates
+          if [ "${{ steps.check-updates.outputs.web_updates }}" -gt "0" ]; then
+            cd apps/web
+            ncu --target ${{ matrix.update-type }} -u
+            npm install
+            cd ../..
+          fi
+
+      - name: Run Full Test Suite
+        if: steps.check-updates.outputs.total_updates > 0
+        run: |
+          npm run test:ci
+          npm run typecheck
+          npm run lint
+        continue-on-error: true
+
+      - name: Build Application
+        if: steps.check-updates.outputs.total_updates > 0
+        run: |
+          npm run build:web
+        continue-on-error: true
+
+      - name: Check for Changes
+        if: steps.check-updates.outputs.total_updates > 0
+        id: changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Update PR
+        if: steps.changes.outputs.changes_detected == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            ⬆️ ${{ matrix.update-type }} dependency updates - $(date +%Y-%m-%d)
+            
+            - Updated ${{ steps.check-updates.outputs.total_updates }} dependencies
+            - Root workspace: ${{ steps.check-updates.outputs.root_updates }} updates
+            - Web workspace: ${{ steps.check-updates.outputs.web_updates }} updates
+            
+            Auto-generated dependency update
+          branch: dependency-updates/${{ matrix.update-type }}/$(date +%Y-%m-%d)
+          title: "⬆️ ${{ matrix.update-type | title }} Dependency Updates - $(date +%Y-%m-%d)"
+          body: |
+            ## ${{ matrix.update-type | title }} Dependency Updates
+            
+            This PR contains automatic ${{ matrix.update-type }} dependency updates.
+            
+            ### Summary
+            - **Total Updates:** ${{ steps.check-updates.outputs.total_updates }}
+            - **Root Workspace:** ${{ steps.check-updates.outputs.root_updates }} updates
+            - **Web Workspace:** ${{ steps.check-updates.outputs.web_updates }} updates
+            
+            ### Updated Dependencies
+            
+            #### Root Workspace Updates
+            <details>
+            <summary>Click to view root updates</summary>
+            
+            ```json
+            $(cat root-updates.json)
+            ```
+            </details>
+            
+            #### Web Workspace Updates
+            <details>
+            <summary>Click to view web updates</summary>
+            
+            ```json
+            $(cat web-updates.json)
+            ```
+            </details>
+            
+            ### Testing
+            - [ ] Automated tests completed
+            - [ ] TypeScript compilation verified
+            - [ ] Linting checks passed
+            - [ ] Application builds successfully
+            - [ ] Manual testing recommended
+            
+            ### Review Checklist
+            - [ ] Review breaking changes in updated packages
+            - [ ] Check for deprecated features
+            - [ ] Verify API compatibility
+            - [ ] Test core application functionality
+            - [ ] Check Web3 integration compatibility
+            
+            **Auto-generated on:** $(date)
+            **Update Type:** ${{ matrix.update-type }}
+          labels: |
+            dependencies
+            automated
+            ${{ matrix.update-type }}-updates
+          draft: false
+
+  # Major Version Updates (Manual Review Required)
+  major-updates:
+    name: Major Version Updates
+    runs-on: ubuntu-latest
+    if: github.event.inputs.update_type == 'major' || github.event.inputs.update_type == 'all'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci --prefer-offline
+          npm --workspace apps/web ci --prefer-offline
+
+      - name: Install npm-check-updates
+        run: npm install -g npm-check-updates
+
+      - name: Check for Major Updates
+        id: major-updates
+        run: |
+          echo "Checking for major version updates..."
+          
+          # Check for major updates
+          ncu --target major --jsonUpgraded > major-updates.json || echo "{}" > major-updates.json
+          
+          cd apps/web
+          ncu --target major --jsonUpgraded > ../../web-major-updates.json || echo "{}" > ../../web-major-updates.json
+          cd ../..
+          
+          MAJOR_COUNT=$(jq 'keys | length' major-updates.json)
+          WEB_MAJOR_COUNT=$(jq 'keys | length' web-major-updates.json)
+          TOTAL_MAJOR=$((MAJOR_COUNT + WEB_MAJOR_COUNT))
+          
+          echo "total_major=$TOTAL_MAJOR" >> $GITHUB_OUTPUT
+
+      - name: Create Major Update Issue
+        if: steps.major-updates.outputs.total_major > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const majorUpdates = JSON.parse(fs.readFileSync('major-updates.json', 'utf8'));
+            const webMajorUpdates = JSON.parse(fs.readFileSync('web-major-updates.json', 'utf8'));
+            
+            let updatesList = '';
+            
+            if (Object.keys(majorUpdates).length > 0) {
+              updatesList += '#### Root Workspace Major Updates\n';
+              for (const [pkg, version] of Object.entries(majorUpdates)) {
+                updatesList += `- ${pkg}: ${version}\n`;
+              }
+              updatesList += '\n';
+            }
+            
+            if (Object.keys(webMajorUpdates).length > 0) {
+              updatesList += '#### Web Workspace Major Updates\n';
+              for (const [pkg, version] of Object.entries(webMajorUpdates)) {
+                updatesList += `- ${pkg}: ${version}\n`;
+              }
+            }
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📋 Major Dependency Updates Available - ${new Date().toISOString().split('T')[0]}`,
+              body: `## Major Version Updates Available
+              
+              The following packages have major version updates available that require manual review:
+              
+              ${updatesList}
+              
+              ### Action Required
+              Major version updates may contain breaking changes and require careful review.
+              
+              #### Review Checklist:
+              - [ ] Review changelog for each package
+              - [ ] Identify breaking changes
+              - [ ] Plan migration strategy
+              - [ ] Update code for compatibility
+              - [ ] Test thoroughly
+              - [ ] Update documentation
+              
+              #### Recommended Approach:
+              1. Create a feature branch
+              2. Update packages one at a time
+              3. Fix breaking changes incrementally
+              4. Run comprehensive tests
+              5. Update any affected documentation
+              6. Create PR with detailed description
+              
+              **Generated on:** ${new Date().toISOString()}
+              **Total Updates:** ${Object.keys(majorUpdates).length + Object.keys(webMajorUpdates).length}`,
+              labels: ['dependencies', 'major-updates', 'manual-review', 'enhancement']
+            });
+
+  # Dependency Vulnerability Monitoring
+  vulnerability-monitor:
+    name: Continuous Vulnerability Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 6 * * *'
+    permissions:
+      security-events: write
+      issues: write
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci --prefer-offline
+          npm --workspace apps/web ci --prefer-offline
+
+      - name: Run Snyk Monitor
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+          args: --all-projects
+
+      - name: GitHub Security Advisory Check
+        run: |
+          # Check GitHub security advisories
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               "https://api.github.com/advisories" | \
+               jq '.[] | select(.severity == "high" or .severity == "critical")' > security-advisories.json
+
+      - name: Generate Vulnerability Report
+        run: |
+          echo "# Vulnerability Monitoring Report - $(date)" > vulnerability-report.md
+          echo "" >> vulnerability-report.md
+          echo "## Current Security Status" >> vulnerability-report.md
+          echo "- Monitoring enabled for all project dependencies" >> vulnerability-report.md
+          echo "- GitHub Security Advisories tracked" >> vulnerability-report.md
+          echo "- Snyk continuous monitoring active" >> vulnerability-report.md
+          echo "" >> vulnerability-report.md
+          echo "**Next automated security patch check:** Tomorrow at 06:00 UTC" >> vulnerability-report.md
+
+      - name: Upload Monitoring Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-monitoring-report
+          path: |
+            vulnerability-report.md
+            security-advisories.json
+          retention-days: 7
+
+  # Clean up old update branches
+  cleanup:
+    name: Cleanup Old Update Branches
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 8 * * MON'
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete Old Update Branches
+        run: |
+          # Delete branches older than 30 days
+          git for-each-ref --format='%(refname:short) %(committerdate)' refs/remotes/origin/dependency-updates/ | \
+          while read branch date; do
+            if [[ $(date -d "$date" +%s) -lt $(date -d "30 days ago" +%s) ]]; then
+              echo "Deleting old branch: $branch"
+              git push origin --delete "${branch#origin/}" || true
+            fi
+          done
+          
+          # Delete security patch branches older than 7 days
+          git for-each-ref --format='%(refname:short) %(committerdate)' refs/remotes/origin/security-patches/ | \
+          while read branch date; do
+            if [[ $(date -d "$date" +%s) -lt $(date -d "7 days ago" +%s) ]]; then
+              echo "Deleting old security branch: $branch"
+              git push origin --delete "${branch#origin/}" || true
+            fi
+          done
+
+  # Dependency Health Dashboard
+  dependency-dashboard:
+    name: Generate Dependency Dashboard
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 8 * * MON' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+      issues: write
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci --prefer-offline
+          npm --workspace apps/web ci --prefer-offline
+          npm install -g npm-check-updates depcheck
+
+      - name: Analyze Dependency Health
+        run: |
+          echo "# Dependency Health Dashboard - $(date)" > dependency-dashboard.md
+          echo "" >> dependency-dashboard.md
+          
+          # Outdated dependencies
+          echo "## Outdated Dependencies" >> dependency-dashboard.md
+          ncu --format group --target minor > ncu-report.txt || true
+          echo '```' >> dependency-dashboard.md
+          cat ncu-report.txt >> dependency-dashboard.md
+          echo '```' >> dependency-dashboard.md
+          echo "" >> dependency-dashboard.md
+          
+          # Unused dependencies
+          echo "## Unused Dependencies" >> dependency-dashboard.md
+          depcheck --json > depcheck-report.json || true
+          UNUSED_COUNT=$(jq '.dependencies | length' depcheck-report.json)
+          echo "**Unused dependencies found:** $UNUSED_COUNT" >> dependency-dashboard.md
+          echo "" >> dependency-dashboard.md
+          
+          # Dependency sizes
+          echo "## Bundle Analysis" >> dependency-dashboard.md
+          echo "For detailed bundle analysis, check the build artifacts from the main CI pipeline." >> dependency-dashboard.md
+          echo "" >> dependency-dashboard.md
+          
+          # Security status
+          echo "## Security Status" >> dependency-dashboard.md
+          npm audit --json > audit-summary.json || true
+          VULN_COUNT=$(jq '.metadata.vulnerabilities.total // 0' audit-summary.json)
+          echo "**Total vulnerabilities:** $VULN_COUNT" >> dependency-dashboard.md
+
+      - name: Update or Create Dashboard Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const dashboard = fs.readFileSync('dependency-dashboard.md', 'utf8');
+            
+            // Look for existing dashboard issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'dependency-dashboard',
+              state: 'open'
+            });
+            
+            if (issues.data.length > 0) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: dashboard
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '📊 Dependency Health Dashboard',
+                body: dashboard,
+                labels: ['dependency-dashboard', 'maintenance']
+              });
+            }

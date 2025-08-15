@@ -1,0 +1,33 @@
+---
+globs: *.sol
+description: Solidity standards for Monad Synapse contracts on Monad testnet.
+---
+
+# Solidity Rules
+
+Kaynaklar: [MDC](mdc:docs/MDC.md), [TECH_STACK](mdc:docs/TECH_STACK.md), [PRD](mdc:docs/PRD.md)
+
+- **Versiyon**: `pragma solidity ^0.8.24;`
+- **Kütüphaneler**: OpenZeppelin (AccessControl, ReentrancyGuard), Chainlink interfaces.
+- **Mimari**
+  - `PredictionMarket`: simülasyon meta kaydı (event + minimal storage), commit‑reveal pencereleri
+  - `DataRegistry`: izinli feed adresleri ve referans ID’ler (sahip/yetkili yönetimi)
+- **Güvenlik**
+  - ReentrancyGuard, checks‑effects‑interactions
+  - AccessControl ile rolleri belirgin tutun (`DEFAULT_ADMIN_ROLE`, `UPDATER_ROLE`)
+  - Front‑running azaltımı için commit‑reveal ve min süre pencereleri
+- **Gas & Tasarım**
+  - Storage packing ve `immutable`/`constant` kullanımı
+  - `unchecked` bloklarını yalnızca kanıtlanmış güvenli noktalarda uygulayın
+  - Olaylar (events) ile dışa gözlemlenebilirlik sağlayın (indexed alanlar)
+- **Zincir/Oracle**
+  - Chainlink aggregator adreslerini koda gömmeyin; `DataRegistry` veya constructor parametreleri ile sağlayın
+  - Fiyatları okunabilir sabit hassasiyete normalize edin; besleme kesintilerinde işlemi fail edin veya güvenli şekilde geciktirin
+- **Hatalar ve Doğrulamalar**
+  - `custom error` tercih edin, `require` mesajlarını minimal tutun
+  - Giriş doğrulamaları (timestamp pencereleri, parametre sınırları) zorunlu
+- **Testler (Foundry)**
+  - Unit + integration + invariant + fuzz; gas snapshot’ları
+  - Başarısız oracle/latency/geri basınç senaryolarını kapsayın
+  - Testnet ile etkileşimli e2e senaryoları (mock yok)
+

@@ -1,0 +1,17 @@
+---
+alwaysApply: true
+description: Testing, QA, fuzzing, security, and audit-lite requirements.
+---
+
+# Testing & Security Rules
+
+Kaynaklar: [PRD](mdc:docs/PRD.md), [MDC](mdc:docs/MDC.md), [TECH_STACK](mdc:docs/TECH_STACK.md)
+
+- **Gerçek Veri**: Testler gerçek Monad testnet ve Chainlink testnet ile çalışır (mock yok). Flakiness’i azaltmak için timeout ve yeniden deneme stratejisi uygulayın.
+- **Contracts**: Foundry unit/integration/invariant/fuzz; gas snapshot ve ölçümler PR’da zorunlu.
+- **Backend**: Jest/Vitest + supertest; k6 ile WS yük testleri (>=1K concurrency hedefi).
+- **Frontend**: Testing Library; kritik akışlar için e2e testler (playwright/cypress ücretsiz katman).
+- **Güvenlik**: Slither statik analiz; reentrancy, erişim kontrolü, integer overflow/underflow, dos saldırıları kontrolleri raporlanır.
+- **Kod İnceleme**: PR’da güvenlik kontrol listesi; riskli değişikliklerde iki göz prensibi (community review kabul).
+- **Sır Yönetimi**: .env değerleri sızdırılmaz; loglarda maskelenir.
+

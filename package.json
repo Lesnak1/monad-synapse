@@ -1,0 +1,27 @@
+{
+  "name": "monad-synapse",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "contracts"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "dev": "npm run dev:web",
+    "test": "npm --workspace apps/web run test",
+    "test:watch": "npm --workspace apps/web run test:watch",
+    "test:coverage": "npm --workspace apps/web run test:coverage",
+    "test:ci": "npm --workspace apps/web run test:ci",
+    "lint": "npm --workspace apps/web run lint",
+    "typecheck": "npm --workspace apps/web run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@metamask/sdk": "^0.33.0",
+    "@radix-ui/react-tabs": "^1.1.13"
+  }
+}

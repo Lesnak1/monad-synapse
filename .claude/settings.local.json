@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run lint)",
+      "WebFetch(domain:localhost)",
+      "Bash(rm:*)",
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd /c:*)",
+      "Bash(npm install:*)",
+      "Bash(npm update:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(npm test:*)",
+      "Bash(sed:*)",
+      "Bash(cat:*)",
+      "Bash(npm run test:coverage:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm outdated)",
+      "Bash(npm run typecheck:*)",
+      "Bash(node fix-imports.js)",
+      "Bash(cp:*)",
+      "Bash(grep:*)",
+      "Bash(node:*)",
+      "Bash(touch:*)",
+      "Bash(chmod:*)",
+      "Bash(npm run:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  }
+}

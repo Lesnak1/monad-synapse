@@ -1,0 +1,840 @@
+name: Performance Testing & Monitoring
+
+on:
+  schedule:
+    # Run performance tests daily at 4 AM UTC
+    - cron: '0 4 * * *'
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of performance test to run'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - lighthouse
+          - load
+          - stress
+          - api
+          - frontend
+      duration:
+        description: 'Test duration in minutes'
+        required: false
+        default: '5'
+        type: string
+      target_environment:
+        description: 'Target environment for testing'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: performance-testing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  STAGING_URL: 'https://staging.monad-synapse.com'
+  PRODUCTION_URL: 'https://monad-synapse.com'
+
+jobs:
+  # Build Application for Testing
+  build-for-testing:
+    name: Build Application
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event.inputs.target_environment == 'staging'
+    outputs:
+      build-version: ${{ steps.version.outputs.build-version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci --prefer-offline --no-audit
+          npm --workspace apps/web ci --prefer-offline --no-audit
+
+      - name: Build Application
+        run: npm run build:web
+        env:
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Start Application
+        run: |
+          cd apps/web
+          npm start &
+          echo $! > app.pid
+          sleep 30
+        env:
+          NODE_ENV: production
+          PORT: 3000
+
+      - name: Generate Build Version
+        id: version
+        run: |
+          BUILD_VERSION="perf-test-$(date +%Y%m%d)-${GITHUB_SHA:0:7}"
+          echo "build-version=$BUILD_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Health Check
+        run: |
+          curl -f http://localhost:3000/api/health || exit 1
+
+  # Lighthouse Performance Audit
+  lighthouse-audit:
+    name: Lighthouse Performance Audit
+    runs-on: ubuntu-latest
+    needs: [build-for-testing]
+    if: always() && (github.event.inputs.test_type == 'lighthouse' || github.event.inputs.test_type == 'full' || github.event.inputs.test_type == '')
+    strategy:
+      matrix:
+        page: [
+          { path: '/', name: 'homepage' },
+          { path: '/games', name: 'games-listing' },
+          { path: '/games/burning-wins', name: 'burning-wins-game' },
+          { path: '/dashboard', name: 'dashboard' },
+          { path: '/lottery', name: 'lottery' }
+        ]
+        device: ['desktop', 'mobile']
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Lighthouse CLI
+        run: npm install -g @lhci/cli lighthouse
+
+      - name: Determine Target URL
+        id: target
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "target-url=http://localhost:3000" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "production" ]]; then
+            echo "target-url=${{ env.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "target-url=${{ env.STAGING_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Start Local App (if PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          npm ci --prefer-offline --no-audit
+          npm --workspace apps/web ci --prefer-offline --no-audit
+          npm run build:web
+          cd apps/web && npm start &
+          sleep 30
+
+      - name: Run Lighthouse Audit
+        run: |
+          URL="${{ steps.target.outputs.target-url }}${{ matrix.page.path }}"
+          DEVICE_CONFIG=$([[ "${{ matrix.device }}" == "mobile" ]] && echo "--preset=perf --emulated-form-factor=mobile" || echo "--preset=perf --emulated-form-factor=desktop")
+          
+          lighthouse "$URL" \
+            --output=html \
+            --output=json \
+            --output-path=./lighthouse-${{ matrix.page.name }}-${{ matrix.device }} \
+            --chrome-flags="--headless --no-sandbox --disable-gpu" \
+            $DEVICE_CONFIG \
+            --budget-path=.lighthouse-budget.json
+
+      - name: Parse Lighthouse Results
+        id: lighthouse-results
+        run: |
+          PERF_SCORE=$(jq '.categories.performance.score * 100' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          ACCESSIBILITY_SCORE=$(jq '.categories.accessibility.score * 100' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          SEO_SCORE=$(jq '.categories.seo.score * 100' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          BEST_PRACTICES_SCORE=$(jq '.categories["best-practices"].score * 100' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          
+          FCP=$(jq '.audits["first-contentful-paint"].numericValue' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          LCP=$(jq '.audits["largest-contentful-paint"].numericValue' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          CLS=$(jq '.audits["cumulative-layout-shift"].numericValue' lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json)
+          
+          echo "performance-score=$PERF_SCORE" >> $GITHUB_OUTPUT
+          echo "accessibility-score=$ACCESSIBILITY_SCORE" >> $GITHUB_OUTPUT
+          echo "seo-score=$SEO_SCORE" >> $GITHUB_OUTPUT
+          echo "best-practices-score=$BEST_PRACTICES_SCORE" >> $GITHUB_OUTPUT
+          echo "fcp=$FCP" >> $GITHUB_OUTPUT
+          echo "lcp=$LCP" >> $GITHUB_OUTPUT
+          echo "cls=$CLS" >> $GITHUB_OUTPUT
+
+      - name: Performance Threshold Check
+        run: |
+          PERF_SCORE=${{ steps.lighthouse-results.outputs.performance-score }}
+          ACCESSIBILITY_SCORE=${{ steps.lighthouse-results.outputs.accessibility-score }}
+          
+          echo "Performance Score: $PERF_SCORE"
+          echo "Accessibility Score: $ACCESSIBILITY_SCORE"
+          
+          if (( $(echo "$PERF_SCORE < 80" | bc -l) )); then
+            echo "❌ Performance score below threshold: $PERF_SCORE"
+            exit 1
+          fi
+          
+          if (( $(echo "$ACCESSIBILITY_SCORE < 90" | bc -l) )); then
+            echo "❌ Accessibility score below threshold: $ACCESSIBILITY_SCORE"
+            exit 1
+          fi
+
+      - name: Upload Lighthouse Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-${{ matrix.page.name }}-${{ matrix.device }}-${{ github.run_number }}
+          path: |
+            lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.html
+            lighthouse-${{ matrix.page.name }}-${{ matrix.device }}.report.json
+          retention-days: 30
+
+  # Load Testing
+  load-testing:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'load' || github.event.inputs.test_type == 'full' || github.event.inputs.test_type == ''
+    strategy:
+      matrix:
+        scenario:
+          - name: 'homepage-load'
+            path: '/'
+            users: 50
+            duration: '5m'
+          - name: 'games-load'
+            path: '/games'
+            users: 100
+            duration: '5m'
+          - name: 'api-load'
+            path: '/api/health'
+            users: 200
+            duration: '3m'
+          - name: 'game-session'
+            path: '/games/burning-wins'
+            users: 75
+            duration: '10m'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install k6
+        run: |
+          curl https://github.com/grafana/k6/releases/download/v0.47.0/k6-v0.47.0-linux-amd64.tar.gz -L | tar xvz --strip-components 1
+
+      - name: Determine Target URL
+        id: target
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "production" ]]; then
+            echo "target-url=${{ env.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "target-url=${{ env.STAGING_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create k6 Load Test Script
+        run: |
+          cat > load-test-${{ matrix.scenario.name }}.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          import { Rate } from 'k6/metrics';
+
+          export let errorRate = new Rate('errors');
+
+          export let options = {
+            stages: [
+              { duration: '1m', target: Math.floor(${{ matrix.scenario.users }} / 3) },
+              { duration: '${{ matrix.scenario.duration }}', target: ${{ matrix.scenario.users }} },
+              { duration: '1m', target: 0 },
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<2000'],
+              http_req_failed: ['rate<0.05'],
+              errors: ['rate<0.1'],
+            },
+          };
+
+          export default function() {
+            let response = http.get('${{ steps.target.outputs.target-url }}${{ matrix.scenario.path }}');
+            
+            let result = check(response, {
+              'status is 200': (r) => r.status === 200,
+              'response time < 2s': (r) => r.timings.duration < 2000,
+            });
+            
+            errorRate.add(!result);
+            sleep(Math.random() * 3);
+          }
+          EOF
+
+      - name: Run Load Test
+        run: |
+          ./k6 run --out json=load-test-${{ matrix.scenario.name }}-results.json load-test-${{ matrix.scenario.name }}.js
+
+      - name: Parse Load Test Results
+        id: load-results
+        run: |
+          # Extract key metrics from k6 results
+          AVG_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.values.avg' load-test-${{ matrix.scenario.name }}-results.json)
+          P95_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.values["p(95)"]' load-test-${{ matrix.scenario.name }}-results.json)
+          ERROR_RATE=$(jq -r '.metrics.http_req_failed.values.rate' load-test-${{ matrix.scenario.name }}-results.json)
+          THROUGHPUT=$(jq -r '.metrics.http_reqs.values.rate' load-test-${{ matrix.scenario.name }}-results.json)
+          
+          echo "avg-response-time=$AVG_RESPONSE_TIME" >> $GITHUB_OUTPUT
+          echo "p95-response-time=$P95_RESPONSE_TIME" >> $GITHUB_OUTPUT
+          echo "error-rate=$ERROR_RATE" >> $GITHUB_OUTPUT
+          echo "throughput=$THROUGHPUT" >> $GITHUB_OUTPUT
+
+      - name: Load Test Validation
+        run: |
+          ERROR_RATE=${{ steps.load-results.outputs.error-rate }}
+          P95_RESPONSE_TIME=${{ steps.load-results.outputs.p95-response-time }}
+          
+          echo "Error Rate: $ERROR_RATE"
+          echo "P95 Response Time: $P95_RESPONSE_TIME ms"
+          
+          if (( $(echo "$ERROR_RATE > 0.05" | bc -l) )); then
+            echo "❌ Error rate too high: $ERROR_RATE"
+            exit 1
+          fi
+          
+          if (( $(echo "$P95_RESPONSE_TIME > 2000" | bc -l) )); then
+            echo "❌ P95 response time too high: $P95_RESPONSE_TIME ms"
+            exit 1
+          fi
+
+      - name: Upload Load Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-${{ matrix.scenario.name }}-${{ github.run_number }}
+          path: |
+            load-test-${{ matrix.scenario.name }}-results.json
+            load-test-${{ matrix.scenario.name }}.js
+          retention-days: 30
+
+  # API Performance Testing
+  api-performance:
+    name: API Performance Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'api' || github.event.inputs.test_type == 'full' || github.event.inputs.test_type == ''
+    strategy:
+      matrix:
+        endpoint:
+          - { path: '/api/health', name: 'health-check', method: 'GET' }
+          - { path: '/api/performance', name: 'performance-metrics', method: 'GET' }
+          - { path: '/api/game/session', name: 'game-session', method: 'POST' }
+          - { path: '/api/payout', name: 'payout-calculation', method: 'POST' }
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Artillery
+        run: npm install -g artillery@latest
+
+      - name: Determine Target URL
+        id: target
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "production" ]]; then
+            echo "target-url=${{ env.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "target-url=${{ env.STAGING_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Artillery Test Config
+        run: |
+          cat > api-test-${{ matrix.endpoint.name }}.yml << EOF
+          config:
+            target: '${{ steps.target.outputs.target-url }}'
+            phases:
+              - duration: 60
+                arrivalRate: 10
+              - duration: 180
+                arrivalRate: 20
+              - duration: 60
+                arrivalRate: 5
+            payload:
+              - path: 'test-data.json'
+                fields:
+                  - gameId
+                  - amount
+                  - userId
+          scenarios:
+            - name: '${{ matrix.endpoint.name }}'
+              weight: 100
+              flow:
+                - ${{ matrix.endpoint.method | lower }}:
+                    url: '${{ matrix.endpoint.path }}'
+                    headers:
+                      Content-Type: 'application/json'
+                    ${{ matrix.endpoint.method == 'POST' && 'json:' || '' }}
+                    ${{ matrix.endpoint.method == 'POST' && '  gameId: "{{ gameId }}"' || '' }}
+                    ${{ matrix.endpoint.method == 'POST' && '  amount: "{{ amount }}"' || '' }}
+                    ${{ matrix.endpoint.method == 'POST' && '  userId: "{{ userId }}"' || '' }}
+                    expect:
+                      - statusCode: 200
+                      - contentType: json
+                - think: 1
+          EOF
+
+      - name: Create Test Data
+        run: |
+          cat > test-data.json << 'EOF'
+          [
+            {"gameId": "burning-wins", "amount": 10, "userId": "test-user-1"},
+            {"gameId": "diamonds", "amount": 25, "userId": "test-user-2"},
+            {"gameId": "slide", "amount": 50, "userId": "test-user-3"}
+          ]
+          EOF
+
+      - name: Run API Performance Test
+        run: |
+          artillery run api-test-${{ matrix.endpoint.name }}.yml --output api-test-${{ matrix.endpoint.name }}-report.json
+
+      - name: Generate Artillery Report
+        run: |
+          artillery report api-test-${{ matrix.endpoint.name }}-report.json --output api-test-${{ matrix.endpoint.name }}-report.html
+
+      - name: Parse API Test Results
+        id: api-results
+        run: |
+          # Extract metrics from Artillery report
+          AVG_RESPONSE_TIME=$(jq -r '.aggregate.latency.median' api-test-${{ matrix.endpoint.name }}-report.json)
+          P95_RESPONSE_TIME=$(jq -r '.aggregate.latency.p95' api-test-${{ matrix.endpoint.name }}-report.json)
+          THROUGHPUT=$(jq -r '.aggregate.rps.mean' api-test-${{ matrix.endpoint.name }}-report.json)
+          ERROR_RATE=$(jq -r '(.aggregate.codes["200"] // 0) / (.aggregate.requestsCompleted // 1)' api-test-${{ matrix.endpoint.name }}-report.json)
+          
+          echo "avg-response-time=$AVG_RESPONSE_TIME" >> $GITHUB_OUTPUT
+          echo "p95-response-time=$P95_RESPONSE_TIME" >> $GITHUB_OUTPUT
+          echo "throughput=$THROUGHPUT" >> $GITHUB_OUTPUT
+          echo "success-rate=$ERROR_RATE" >> $GITHUB_OUTPUT
+
+      - name: Upload API Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-${{ matrix.endpoint.name }}-${{ github.run_number }}
+          path: |
+            api-test-${{ matrix.endpoint.name }}-report.json
+            api-test-${{ matrix.endpoint.name }}-report.html
+            api-test-${{ matrix.endpoint.name }}.yml
+          retention-days: 30
+
+  # Frontend Performance Testing
+  frontend-performance:
+    name: Frontend Performance Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'frontend' || github.event.inputs.test_type == 'full' || github.event.inputs.test_type == ''
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Playwright
+        run: |
+          npm install @playwright/test
+          npx playwright install
+
+      - name: Determine Target URL
+        id: target
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "target-url=http://localhost:3000" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "production" ]]; then
+            echo "target-url=${{ env.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "target-url=${{ env.STAGING_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Start Local App (if PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          npm ci --prefer-offline --no-audit
+          npm --workspace apps/web ci --prefer-offline --no-audit
+          npm run build:web
+          cd apps/web && npm start &
+          sleep 30
+
+      - name: Create Playwright Performance Test
+        run: |
+          cat > playwright-performance.spec.ts << 'EOF'
+          import { test, expect } from '@playwright/test';
+
+          const BASE_URL = '${{ steps.target.outputs.target-url }}';
+
+          test.describe('Frontend Performance Tests', () => {
+            test('Homepage performance', async ({ page }) => {
+              const startTime = Date.now();
+              await page.goto(BASE_URL);
+              
+              // Wait for key elements to load
+              await page.waitForSelector('[data-testid="hero-section"]', { timeout: 5000 });
+              await page.waitForLoadState('networkidle');
+              
+              const loadTime = Date.now() - startTime;
+              console.log(`Homepage load time: ${loadTime}ms`);
+              expect(loadTime).toBeLessThan(3000);
+              
+              // Check Core Web Vitals
+              const vitals = await page.evaluate(() => {
+                return new Promise((resolve) => {
+                  new PerformanceObserver((list) => {
+                    const entries = list.getEntries();
+                    resolve(entries.map(entry => ({
+                      name: entry.name,
+                      value: entry.value
+                    })));
+                  }).observe({ entryTypes: ['measure', 'navigation'] });
+                });
+              });
+            });
+
+            test('Game loading performance', async ({ page }) => {
+              const startTime = Date.now();
+              await page.goto(`${BASE_URL}/games/burning-wins`);
+              
+              await page.waitForSelector('[data-testid="game-canvas"]', { timeout: 8000 });
+              await page.waitForLoadState('networkidle');
+              
+              const loadTime = Date.now() - startTime;
+              console.log(`Game load time: ${loadTime}ms`);
+              expect(loadTime).toBeLessThan(5000);
+            });
+
+            test('Navigation performance', async ({ page }) => {
+              await page.goto(BASE_URL);
+              
+              const navigationTimes = [];
+              
+              // Test navigation to different pages
+              const pages = ['/games', '/dashboard', '/lottery'];
+              
+              for (const path of pages) {
+                const startTime = Date.now();
+                await page.click(`a[href="${path}"]`);
+                await page.waitForLoadState('networkidle');
+                const navTime = Date.now() - startTime;
+                navigationTimes.push(navTime);
+                console.log(`Navigation to ${path}: ${navTime}ms`);
+                expect(navTime).toBeLessThan(2000);
+              }
+            });
+          });
+          EOF
+
+      - name: Run Playwright Performance Tests
+        run: npx playwright test playwright-performance.spec.ts --reporter=json:playwright-results.json
+
+      - name: Upload Frontend Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-performance-${{ github.run_number }}
+          path: |
+            playwright-results.json
+            playwright-performance.spec.ts
+          retention-days: 30
+
+  # Stress Testing
+  stress-testing:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'stress' || github.event.inputs.test_type == 'full'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          curl https://github.com/grafana/k6/releases/download/v0.47.0/k6-v0.47.0-linux-amd64.tar.gz -L | tar xvz --strip-components 1
+
+      - name: Determine Target URL
+        id: target
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "production" ]]; then
+            echo "target-url=${{ env.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "target-url=${{ env.STAGING_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Stress Test Script
+        run: |
+          cat > stress-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          
+          export let options = {
+            stages: [
+              { duration: '2m', target: 100 },
+              { duration: '5m', target: 200 },
+              { duration: '2m', target: 300 },
+              { duration: '5m', target: 400 },
+              { duration: '10m', target: 400 },
+              { duration: '2m', target: 0 },
+            ],
+            thresholds: {
+              http_req_duration: ['p(99)<3000'],
+              http_req_failed: ['rate<0.1'],
+            },
+          };
+
+          export default function() {
+            let responses = http.batch([
+              ['GET', '${{ steps.target.outputs.target-url }}/'],
+              ['GET', '${{ steps.target.outputs.target-url }}/games'],
+              ['GET', '${{ steps.target.outputs.target-url }}/api/health'],
+            ]);
+            
+            check(responses[0], {
+              'homepage status is 200': (r) => r.status === 200,
+            });
+            
+            sleep(1);
+          }
+          EOF
+
+      - name: Run Stress Test
+        run: |
+          ./k6 run --out json=stress-test-results.json stress-test.js
+        continue-on-error: true
+
+      - name: Upload Stress Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-test-${{ github.run_number }}
+          path: |
+            stress-test-results.json
+            stress-test.js
+          retention-days: 30
+
+  # Performance Report Generation
+  performance-report:
+    name: Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: [lighthouse-audit, load-testing, api-performance, frontend-performance]
+    if: always()
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: performance-reports
+
+      - name: Generate Performance Summary
+        run: |
+          echo "# Performance Test Report" > performance-summary.md
+          echo "**Test Date:** $(date)" >> performance-summary.md
+          echo "**Environment:** ${{ github.event.inputs.target_environment || 'staging' }}" >> performance-summary.md
+          echo "**Trigger:** ${{ github.event_name }}" >> performance-summary.md
+          echo "" >> performance-summary.md
+          
+          echo "## Test Results Summary" >> performance-summary.md
+          echo "- Lighthouse Audit: ${{ needs.lighthouse-audit.result }}" >> performance-summary.md
+          echo "- Load Testing: ${{ needs.load-testing.result }}" >> performance-summary.md
+          echo "- API Performance: ${{ needs.api-performance.result }}" >> performance-summary.md
+          echo "- Frontend Performance: ${{ needs.frontend-performance.result }}" >> performance-summary.md
+          echo "" >> performance-summary.md
+          
+          echo "## Key Metrics" >> performance-summary.md
+          echo "### Lighthouse Scores (Desktop)" >> performance-summary.md
+          echo "- Performance: See individual page reports" >> performance-summary.md
+          echo "- Accessibility: See individual page reports" >> performance-summary.md
+          echo "- Best Practices: See individual page reports" >> performance-summary.md
+          echo "- SEO: See individual page reports" >> performance-summary.md
+          echo "" >> performance-summary.md
+          
+          echo "## Recommendations" >> performance-summary.md
+          echo "1. Monitor Core Web Vitals regularly" >> performance-summary.md
+          echo "2. Optimize critical rendering path" >> performance-summary.md
+          echo "3. Implement performance budgets" >> performance-summary.md
+          echo "4. Set up performance monitoring alerts" >> performance-summary.md
+
+      - name: Upload Performance Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-summary-${{ github.run_number }}
+          path: performance-summary.md
+          retention-days: 90
+
+  # Performance Notifications
+  performance-notification:
+    name: Performance Notifications
+    runs-on: ubuntu-latest
+    needs: [lighthouse-audit, load-testing, api-performance, frontend-performance]
+    if: always()
+    steps:
+      - name: Performance Alert
+        if: contains(needs.*.result, 'failure')
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#performance-alerts'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          text: |
+            ⚠️ Performance Test Alert
+            Repository: Monad Synapse Casino Platform
+            Environment: ${{ github.event.inputs.target_environment || 'staging' }}
+            
+            Test Results:
+            - Lighthouse: ${{ needs.lighthouse-audit.result }}
+            - Load Testing: ${{ needs.load-testing.result }}
+            - API Performance: ${{ needs.api-performance.result }}
+            - Frontend: ${{ needs.frontend-performance.result }}
+            
+            Performance degradation detected!
+
+      - name: Performance Summary
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#performance'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          text: |
+            ✅ Performance Tests Passed
+            Repository: Monad Synapse Casino Platform
+            Environment: ${{ github.event.inputs.target_environment || 'staging' }}
+            All performance thresholds met.
+
+      - name: Create Performance Issue
+        if: contains(needs.*.result, 'failure')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Performance Regression Detected - ${new Date().toISOString().split('T')[0]}`,
+              body: `## Performance Test Results
+              
+              **Test Date:** ${new Date().toISOString()}
+              **Environment:** ${{ github.event.inputs.target_environment || 'staging' }}
+              **Trigger:** ${context.eventName}
+              
+              ### Test Results:
+              - Lighthouse Audit: ${{ needs.lighthouse-audit.result }}
+              - Load Testing: ${{ needs.load-testing.result }}
+              - API Performance: ${{ needs.api-performance.result }}
+              - Frontend Performance: ${{ needs.frontend-performance.result }}
+              
+              ### Action Items:
+              - [ ] Review performance test reports
+              - [ ] Identify performance bottlenecks
+              - [ ] Optimize slow components/endpoints
+              - [ ] Re-run performance tests
+              
+              **Detailed reports available in workflow run artifacts.**`,
+              labels: ['performance', 'regression', 'high-priority']
+            });
+
+  # Performance Budget Enforcement
+  performance-budget:
+    name: Performance Budget Check
+    runs-on: ubuntu-latest
+    needs: [lighthouse-audit]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Lighthouse Reports
+        uses: actions/download-artifact@v4
+        with:
+          path: lighthouse-reports
+
+      - name: Check Performance Budget
+        run: |
+          # Define performance budgets
+          PERFORMANCE_THRESHOLD=80
+          ACCESSIBILITY_THRESHOLD=90
+          SEO_THRESHOLD=90
+          BEST_PRACTICES_THRESHOLD=90
+          
+          # Check all lighthouse reports
+          FAILED_PAGES=()
+          
+          for report in lighthouse-reports/*/lighthouse-*-desktop.report.json; do
+            if [[ -f "$report" ]]; then
+              PAGE_NAME=$(basename "$report" | cut -d'-' -f2-3)
+              PERF_SCORE=$(jq '.categories.performance.score * 100' "$report")
+              
+              if (( $(echo "$PERF_SCORE < $PERFORMANCE_THRESHOLD" | bc -l) )); then
+                FAILED_PAGES+=("$PAGE_NAME: $PERF_SCORE")
+              fi
+            fi
+          done
+          
+          if [[ ${#FAILED_PAGES[@]} -gt 0 ]]; then
+            echo "❌ Performance budget violations:"
+            printf '%s\n' "${FAILED_PAGES[@]}"
+            exit 1
+          else
+            echo "✅ All pages meet performance budget requirements"
+          fi
+
+      - name: Comment PR with Performance Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            let comment = '## 🎯 Performance Test Results\n\n';
+            comment += '| Page | Performance | Accessibility | SEO | Best Practices |\n';
+            comment += '|------|-------------|---------------|-----|----------------|\n';
+            
+            // Read lighthouse reports and generate table
+            const reportsDir = 'lighthouse-reports';
+            if (fs.existsSync(reportsDir)) {
+              const reports = fs.readdirSync(reportsDir, { recursive: true })
+                .filter(file => file.endsWith('desktop.report.json'));
+              
+              for (const report of reports.slice(0, 5)) { // Limit to 5 reports
+                try {
+                  const data = JSON.parse(fs.readFileSync(path.join(reportsDir, report), 'utf8'));
+                  const pageName = path.basename(report).split('-')[1];
+                  const perf = Math.round(data.categories.performance.score * 100);
+                  const a11y = Math.round(data.categories.accessibility.score * 100);
+                  const seo = Math.round(data.categories.seo.score * 100);
+                  const bp = Math.round(data.categories['best-practices'].score * 100);
+                  
+                  comment += `| ${pageName} | ${perf} | ${a11y} | ${seo} | ${bp} |\n`;
+                } catch (error) {
+                  console.log(`Error reading ${report}:`, error.message);
+                }
+              }
+            }
+            
+            comment += '\n📊 Detailed reports available in workflow artifacts.';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

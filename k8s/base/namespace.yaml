@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monad-synapse
+  labels:
+    name: monad-synapse
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    name: staging
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: namespace
+    environment: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    name: production
+    app.kubernetes.io/name: monad-synapse
+    app.kubernetes.io/component: namespace
+    environment: production

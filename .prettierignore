@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+**/build/
+**/dist/
+
+# Coverage reports
+coverage/
+**/coverage/
+
+# Generated files
+**/generated/
+**/.generated/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment files
+.env*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+**/.cache/
+
+# Documentation that shouldn't be formatted
+CHANGELOG.md
+LICENSE.md
+
+# Third-party files
+public/fonts/
+public/vendor/
+
+# Solidity contracts (handled by solhint)
+contracts/**/*.sol
+
+# Configuration files with strict formatting
+foundry.toml
+hardhat.config.*

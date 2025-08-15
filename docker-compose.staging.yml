@@ -1,0 +1,315 @@
+# Docker Compose configuration for Monad Synapse Casino Platform - Staging
+version: '3.8'
+
+networks:
+  monad-staging-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  postgres-staging-data:
+    driver: local
+  redis-staging-data:
+    driver: local
+
+services:
+  # PostgreSQL Database - Staging
+  postgres:
+    image: postgres:16-alpine
+    container_name: monad-postgres-staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${STAGING_DB_NAME:-monad_synapse_staging}
+      POSTGRES_USER: ${STAGING_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:-staging123}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-staging-data:/var/lib/postgresql/data
+      - ./scripts/init-staging-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - monad-staging-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STAGING_DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis Cache - Staging
+  redis:
+    image: redis:7-alpine
+    container_name: monad-redis-staging
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-staging-data:/data
+      - ./config/redis.staging.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - monad-staging-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Main Web Application - Staging
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.staging
+      args:
+        - BUILD_VERSION=${BUILD_VERSION:-staging-latest}
+    image: monad-synapse:staging
+    container_name: monad-web-staging
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_APP_ENV=staging
+      - DATABASE_URL=postgresql://${STAGING_DB_USER:-postgres}:${STAGING_DB_PASSWORD:-staging123}@postgres:5432/${STAGING_DB_NAME:-monad_synapse_staging}
+      - REDIS_URL=redis://redis:6379
+      - NEXT_TELEMETRY_DISABLED=1
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      # Staging-specific environment variables
+      - NEXT_PUBLIC_API_BASE_URL=${STAGING_API_BASE_URL:-https://staging.monad-synapse.com/api}
+      - NEXT_PUBLIC_BLOCKCHAIN_NETWORK=${STAGING_BLOCKCHAIN_NETWORK:-testnet}
+      - NEXT_PUBLIC_CONTRACT_ADDRESS=${STAGING_CONTRACT_ADDRESS}
+      - JWT_SECRET=${STAGING_JWT_SECRET}
+      - ENCRYPTION_KEY=${STAGING_ENCRYPTION_KEY}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./logs/staging:/app/logs:rw
+      - ./data/staging:/app/data:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monad-staging-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # Nginx Load Balancer - Staging
+  nginx:
+    image: nginx:alpine
+    container_name: monad-nginx-staging
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx/staging:/var/log/nginx:rw
+    depends_on:
+      - web
+    networks:
+      - monad-staging-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Database Backup Service
+  postgres-backup:
+    image: postgres:16-alpine
+    container_name: monad-postgres-backup-staging
+    restart: "no"
+    environment:
+      PGPASSWORD: ${STAGING_DB_PASSWORD:-staging123}
+    volumes:
+      - ./backups/staging:/backups:rw
+      - ./scripts/backup-staging.sh:/backup.sh:ro
+    depends_on:
+      - postgres
+    networks:
+      - monad-staging-network
+    command: /backup.sh
+    profiles:
+      - backup
+
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: monad-prometheus-staging
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.staging.yml:/etc/prometheus/prometheus.yml:ro
+      - ./data/prometheus/staging:/prometheus:rw
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - monad-staging-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - monitoring
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: monad-grafana-staging
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-staging123}
+      GF_SERVER_DOMAIN: ${STAGING_DOMAIN:-staging.monad-synapse.com}
+      GF_SERVER_ROOT_URL: https://${STAGING_DOMAIN:-staging.monad-synapse.com}/grafana/
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - ./config/grafana/grafana.staging.ini:/etc/grafana/grafana.ini:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./data/grafana/staging:/var/lib/grafana:rw
+    depends_on:
+      - prometheus
+    networks:
+      - monad-staging-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - monitoring
+
+  # Log Management - Loki
+  loki:
+    image: grafana/loki:latest
+    container_name: monad-loki-staging
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./config/loki/loki.staging.yml:/etc/loki/local-config.yaml:ro
+      - ./data/loki/staging:/loki:rw
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monad-staging-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - logging
+
+  # Log Collection - Promtail
+  promtail:
+    image: grafana/promtail:latest
+    container_name: monad-promtail-staging
+    restart: unless-stopped
+    volumes:
+      - ./config/promtail/promtail.staging.yml:/etc/promtail/config.yml:ro
+      - ./logs/staging:/var/log/app:ro
+      - /var/log:/host/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - monad-staging-network
+    profiles:
+      - logging
+
+  # Health Check Service
+  healthcheck:
+    image: curlimages/curl:latest
+    container_name: monad-healthcheck-staging
+    restart: unless-stopped
+    command: >
+      sh -c "
+        while true; do
+          curl -f http://web:3000/api/health || echo 'Health check failed'
+          curl -f http://web:3000/api/performance || echo 'Performance check failed'
+          sleep 60
+        done
+      "
+    depends_on:
+      - web
+    networks:
+      - monad-staging-network
+    profiles:
+      - healthcheck
+
+  # Security Scanner
+  security-scanner:
+    image: owasp/zap2docker-stable:latest
+    container_name: monad-security-scanner
+    restart: "no"
+    volumes:
+      - ./security-reports:/zap/wrk:rw
+    command: >
+      zap-baseline.py -t https://staging.monad-synapse.com
+      -g gen.conf -r security-baseline-report.html
+    networks:
+      - monad-staging-network
+    profiles:
+      - security
+
+  # Performance Testing
+  performance-test:
+    image: loadimpact/k6:latest
+    container_name: monad-performance-test
+    restart: "no"
+    volumes:
+      - ./performance-tests:/scripts:ro
+      - ./performance-reports:/reports:rw
+    command: run --out json=/reports/staging-performance.json /scripts/staging-load-test.js
+    environment:
+      - TARGET_URL=https://staging.monad-synapse.com
+    networks:
+      - monad-staging-network
+    profiles:
+      - performance

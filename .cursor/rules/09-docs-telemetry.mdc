@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+description: Documentation, diagrams, and minimal, privacy-preserving telemetry rules.
+---
+
+# Docs & Telemetry Rules
+
+Kaynaklar: [README](mdc:README.md), [MDC](mdc:docs/MDC.md), [PRD](mdc:docs/PRD.md)
+
+- **Doküman Güncelleme**: Mimari/ürün değişikliklerinde ilgili dokümanları aynı PR’da güncelleyin.
+- **Diyagramlar**: Mermaid kullanın; diyagramları dokümanlarla birlikte versiyonlayın.
+- **Ölçümler**: Yalnız anonim ve ücretsiz çözümler; PII toplamadan temel metrikler (DAU/WAU, simülasyon sayısı, latency, hata oranı).
+- **Eksiksiz İzlenebilirlik**: Önemli kararlar ve ADR’ler kısa notlarla `docs/` altında tutulur.
+- **Uyarılar/Disclaimers**: Uygulama ve dokümanlarda finansal tavsiye değildir ibaresi.
+

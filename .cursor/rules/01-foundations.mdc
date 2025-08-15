@@ -1,0 +1,21 @@
+---
+alwaysApply: true
+description: Global principles for Monad Synapse; budget 0, real data (no mocks), security-first, English UI by default, PRD alignment.
+---
+
+# Monad Synapse — Foundations
+
+Bu kurallar tüm çalışmalara uygulanır. Ayrıntılı amaç ve kapsam için [README.md](mdc:README.md), [PRD.md](mdc:docs/PRD.md), [TECH_STACK.md](mdc:docs/TECH_STACK.md), [MDC.md](mdc:docs/MDC.md) ve [ROADMAP.md](mdc:docs/ROADMAP.md) inceleyin.
+
+- **Amaç**: Monad testnet üzerinde gerçek verilerle (Chainlink testnet oracles, gerçek tx) AI destekli paralel tahmin/simülasyon ağı kurmak.
+- **Bütçe 0**: Yalnızca ücretsiz katmanlar ve açık kaynak. Ücretli servis/bağımlılık eklemeyin; alternatif ücretsiz çözüm veya self-host düşünün.
+- **Gerçek veri — mock yasak**: Test ve çalışma yollarında mock kullanmayın. Oracles için rate limit/failure durumunda cache/TWAP/geri basınç stratejisi uygulayın; yine de gerçek feed semantiklerini koruyun.
+- **UI dili**: Varsayılan dil İngilizce, TR ikinci dil. Metin/i18n alt yapısını bu varsayımla tasarlayın.
+- **Güvenlik önce**: Reentrancy, access control, input validation, commit-reveal; gas optimizasyonu güvenliği bozmayacak şekilde.
+- **Kalite çıtası**: TypeScript strict; açık, yüksek okunabilirlik; erken dönüş ve guard pattern'leri; meaningful isimlendirme.
+- **Gözlemlenebilirlik**: Yapılandırılabilir log seviyeleri (Pino) ve health endpoint'leri. Hassas bilgiler loglanmaz.
+- **Kaynak doğruluğu**: Chainlink feed adresleri ve Monad testnet konfigürasyonunu dokümantasyonla doğrulayın; adresleri koda gömmeyin, registry/konfig ile yönetin.
+- **Senkronizasyon**: Mimaride veya protokolde değişiklik yaptıysanız ilgili dokümanları güncelleyin (PRD, MDC, TECH_STACK, ROADMAP).
+
+Referanslar: [README.md](mdc:README.md), [PRD](mdc:docs/PRD.md), [MDC](mdc:docs/MDC.md), [TECH_STACK](mdc:docs/TECH_STACK.md), [ROADMAP](mdc:docs/ROADMAP.md)
+

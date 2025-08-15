@@ -1,0 +1,19 @@
+---
+globs: services/ai/**/*.ts
+description: HF Inference proxy, featurization, metrics and safety constraints for AI service.
+---
+
+# AI Service Rules
+
+Referanslar: [TECH_STACK](mdc:docs/TECH_STACK.md), [PRD](mdc:docs/PRD.md)
+
+- **Inference**: Hugging Face Inference API (ücretsiz kota). Token opsiyonel; varsa rate limit artışı
+- **Modeller**: Autoformer/Informer/TimesNet + baselines (Naive/MA). Parametreler konfig üzerinden
+- **Featurization**: log‑return, z‑score, volatilite; pencere/buffer sınırları belirlidir
+- **Metrikler**: MAPE, RMSE zorunlu; her sonuçla birlikte dönülür
+- **API**: `/inference` (POST) girdi: seri, pencere, model, param; çıktı: forecast, metrics, cid?
+- **Kayıt**: İsteğe bağlı olarak IPFS’e JSON/CSV yazımı; CID döndürme
+- **Gizlilik**: PII yok; ham cüzdan adresleri işlenmez; sadece seri verisi
+- **Dayanıklılık**: HF arızasında kısa‑süreli retry ve exponential backoff; fallback baseline model
+- **Test**: Ayrık e2e ve latency testleri; sonuç deterministikliği için seed kontrolü (mümkünse)
+

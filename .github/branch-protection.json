@@ -1,0 +1,323 @@
+{
+  "branchProtectionRules": {
+    "main": {
+      "required_status_checks": {
+        "strict": true,
+        "contexts": [
+          "Quality Gate",
+          "Test Suite",
+          "Security Scan",
+          "Build Application",
+          "Coverage Report",
+          "License Compliance",
+          "CI Status"
+        ]
+      },
+      "enforce_admins": false,
+      "required_pull_request_reviews": {
+        "required_approving_review_count": 2,
+        "dismiss_stale_reviews": true,
+        "require_code_owner_reviews": true,
+        "require_last_push_approval": true,
+        "bypass_pull_request_allowances": {
+          "users": [],
+          "teams": ["platform-leads"],
+          "apps": []
+        }
+      },
+      "restrictions": null,
+      "required_linear_history": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false,
+      "required_conversation_resolution": true,
+      "lock_branch": false,
+      "allow_fork_syncing": false
+    },
+    "develop": {
+      "required_status_checks": {
+        "strict": true,
+        "contexts": [
+          "Quality Gate",
+          "Test Suite",
+          "Security Scan",
+          "Build Application"
+        ]
+      },
+      "enforce_admins": false,
+      "required_pull_request_reviews": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews": true,
+        "require_code_owner_reviews": true,
+        "require_last_push_approval": false,
+        "bypass_pull_request_allowances": {
+          "users": [],
+          "teams": ["developers", "platform-leads"],
+          "apps": []
+        }
+      },
+      "restrictions": null,
+      "required_linear_history": false,
+      "allow_force_pushes": false,
+      "allow_deletions": false,
+      "required_conversation_resolution": true,
+      "lock_branch": false,
+      "allow_fork_syncing": true
+    },
+    "release/*": {
+      "required_status_checks": {
+        "strict": true,
+        "contexts": [
+          "Quality Gate",
+          "Test Suite",
+          "Security Scan",
+          "Build Application",
+          "Coverage Report",
+          "Performance Tests",
+          "License Compliance"
+        ]
+      },
+      "enforce_admins": false,
+      "required_pull_request_reviews": {
+        "required_approving_review_count": 2,
+        "dismiss_stale_reviews": true,
+        "require_code_owner_reviews": true,
+        "require_last_push_approval": true,
+        "bypass_pull_request_allowances": {
+          "users": [],
+          "teams": ["platform-leads"],
+          "apps": []
+        }
+      },
+      "restrictions": {
+        "users": [],
+        "teams": ["platform-leads", "release-managers"],
+        "apps": []
+      },
+      "required_linear_history": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false,
+      "required_conversation_resolution": true,
+      "lock_branch": false,
+      "allow_fork_syncing": false
+    }
+  },
+  "rulesets": {
+    "security-critical": {
+      "name": "Security Critical Files",
+      "target": "branch",
+      "source_type": "Repository",
+      "enforcement": "active",
+      "conditions": {
+        "ref_name": {
+          "include": ["refs/heads/main", "refs/heads/develop"],
+          "exclude": []
+        }
+      },
+      "rules": [
+        {
+          "type": "path_based_push_restrictions",
+          "parameters": {
+            "restricted_file_paths": [
+              ".github/workflows/*.yml",
+              ".github/workflows/*.yaml",
+              "Dockerfile*",
+              "docker-compose*.yml",
+              "package*.json",
+              "tsconfig.json",
+              "next.config.mjs",
+              ".env*",
+              "middleware.ts",
+              "lib/auth.ts",
+              "lib/security*.ts",
+              "lib/*Wallet.ts",
+              "contracts/**/*.sol"
+            ],
+            "bypass_actors": [
+              {
+                "actor_type": "Team",
+                "actor_id": "platform-leads"
+              },
+              {
+                "actor_type": "Team", 
+                "actor_id": "security-team"
+              }
+            ]
+          }
+        },
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "required_status_checks": [
+              {
+                "context": "Security Scan",
+                "integration_id": null
+              },
+              {
+                "context": "SAST Security Scan",
+                "integration_id": null
+              },
+              {
+                "context": "Secret Scanning",
+                "integration_id": null
+              }
+            ],
+            "strict_required_status_checks_policy": true
+          }
+        }
+      ]
+    },
+    "dependency-management": {
+      "name": "Dependency Management",
+      "target": "branch",
+      "source_type": "Repository",
+      "enforcement": "active",
+      "conditions": {
+        "ref_name": {
+          "include": ["refs/heads/main", "refs/heads/develop"],
+          "exclude": []
+        }
+      },
+      "rules": [
+        {
+          "type": "path_based_push_restrictions",
+          "parameters": {
+            "restricted_file_paths": [
+              "package*.json",
+              "npm-shrinkwrap.json",
+              "yarn.lock",
+              "pnpm-lock.yaml"
+            ],
+            "bypass_actors": [
+              {
+                "actor_type": "App",
+                "actor_id": "dependabot"
+              },
+              {
+                "actor_type": "Team",
+                "actor_id": "platform-leads"
+              }
+            ]
+          }
+        },
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "required_status_checks": [
+              {
+                "context": "Vulnerability Scanning",
+                "integration_id": null
+              },
+              {
+                "context": "License Compliance",
+                "integration_id": null
+              }
+            ],
+            "strict_required_status_checks_policy": true
+          }
+        }
+      ]
+    }
+  },
+  "teams": {
+    "platform-leads": {
+      "name": "Platform Leads",
+      "description": "Senior engineers and tech leads with administrative access",
+      "privacy": "closed",
+      "permission": "admin"
+    },
+    "developers": {
+      "name": "Developers",
+      "description": "Core development team members",
+      "privacy": "closed",
+      "permission": "push"
+    },
+    "security-team": {
+      "name": "Security Team",
+      "description": "Security specialists and auditors",
+      "privacy": "closed",
+      "permission": "push"
+    },
+    "qa-team": {
+      "name": "QA Team",
+      "description": "Quality assurance and testing specialists",
+      "privacy": "closed",
+      "permission": "triage"
+    },
+    "release-managers": {
+      "name": "Release Managers",
+      "description": "Release coordination and deployment specialists",
+      "privacy": "closed",
+      "permission": "push"
+    }
+  },
+  "repository_settings": {
+    "has_issues": true,
+    "has_projects": true,
+    "has_wiki": false,
+    "has_downloads": false,
+    "has_pages": false,
+    "allow_squash_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": true,
+    "allow_auto_merge": true,
+    "delete_branch_on_merge": true,
+    "allow_update_branch": true,
+    "use_squash_pr_title_as_default": true,
+    "squash_merge_commit_message": "PR_BODY",
+    "squash_merge_commit_title": "PR_TITLE",
+    "merge_commit_message": "PR_TITLE",
+    "merge_commit_title": "MERGE_MESSAGE"
+  },
+  "security_settings": {
+    "security_and_analysis": {
+      "advanced_security": {
+        "status": "enabled"
+      },
+      "secret_scanning": {
+        "status": "enabled"
+      },
+      "secret_scanning_push_protection": {
+        "status": "enabled"
+      },
+      "dependency_graph": {
+        "status": "enabled"
+      },
+      "dependabot_security_updates": {
+        "status": "enabled"
+      }
+    },
+    "vulnerability_alerts": true,
+    "automated_security_fixes": true
+  },
+  "required_workflows": {
+    "ci": {
+      "path": ".github/workflows/ci.yml",
+      "required_for": ["main", "develop"],
+      "description": "Main CI pipeline with quality gates"
+    },
+    "security-scan": {
+      "path": ".github/workflows/security-scan.yml", 
+      "required_for": ["main", "develop"],
+      "description": "Comprehensive security scanning"
+    },
+    "dependency-management": {
+      "path": ".github/workflows/dependency-management.yml",
+      "required_for": ["main", "develop"],
+      "description": "Automated dependency management and vulnerability scanning"
+    }
+  },
+  "pr_templates": {
+    "default": {
+      "name": "default.md",
+      "content": "## Description\n\n[Describe the changes in this PR]\n\n## Type of Change\n\n- [ ] Bug fix (non-breaking change which fixes an issue)\n- [ ] New feature (non-breaking change which adds functionality)\n- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)\n- [ ] Documentation update\n- [ ] Performance improvement\n- [ ] Security enhancement\n- [ ] Refactoring (code change that neither fixes a bug nor adds a feature)\n- [ ] Test improvement\n\n## Security Checklist\n\n- [ ] No sensitive data (passwords, API keys, etc.) is included\n- [ ] Input validation is properly implemented\n- [ ] Authentication and authorization checks are in place\n- [ ] No SQL injection vulnerabilities introduced\n- [ ] XSS prevention measures implemented where applicable\n- [ ] CSRF protection maintained\n\n## Casino Platform Specific Checklist\n\n- [ ] Game mechanics are fair and RNG is secure\n- [ ] Payout calculations are correct and auditable\n- [ ] Wallet interactions are secure and tested\n- [ ] Blockchain transactions are properly validated\n- [ ] Rate limiting is implemented for gaming endpoints\n- [ ] Responsible gaming measures are maintained\n\n## Testing\n\n- [ ] Unit tests added/updated\n- [ ] Integration tests added/updated\n- [ ] End-to-end tests added/updated\n- [ ] Performance tests considered\n- [ ] Security tests included\n- [ ] Manual testing completed\n\n## Documentation\n\n- [ ] Code comments updated\n- [ ] API documentation updated (if applicable)\n- [ ] README updated (if applicable)\n- [ ] Changelog updated\n\n## Deployment\n\n- [ ] Database migrations included (if applicable)\n- [ ] Environment variables documented\n- [ ] Deployment instructions updated\n- [ ] Rollback plan considered\n\n## Screenshots/Videos\n\n[Add screenshots or videos if applicable]\n\n## Related Issues\n\nFixes #[issue_number]\nRelated to #[issue_number]\n\n## Additional Context\n\n[Add any additional context or notes for reviewers]"
+    },
+    "security": {
+      "name": "security.md",
+      "content": "## Security Fix Description\n\n[Describe the security issue and the fix]\n\n## Vulnerability Details\n\n- **Severity**: [Critical/High/Medium/Low]\n- **CVSS Score**: [If applicable]\n- **CVE ID**: [If applicable]\n- **Affected Components**: [List affected parts of the system]\n\n## Security Impact Assessment\n\n- [ ] Confidentiality impact\n- [ ] Integrity impact\n- [ ] Availability impact\n- [ ] Authentication bypass\n- [ ] Authorization bypass\n- [ ] Data exposure\n- [ ] Remote code execution\n- [ ] Denial of service\n\n## Fix Description\n\n[Detailed description of the fix]\n\n## Security Testing\n\n- [ ] Vulnerability scanner results clean\n- [ ] Penetration testing completed\n- [ ] Code review by security team\n- [ ] Static analysis tools passed\n- [ ] Dynamic analysis completed\n\n## Deployment Urgency\n\n- [ ] Critical - Deploy immediately\n- [ ] High - Deploy within 24 hours\n- [ ] Medium - Deploy within 1 week\n- [ ] Low - Deploy in next release cycle\n\n## Communication Plan\n\n- [ ] Security team notified\n- [ ] Stakeholders informed\n- [ ] Customer communication prepared (if needed)\n- [ ] Public disclosure timeline planned\n\n## Rollback Plan\n\n[Describe rollback procedures if needed]"
+    },
+    "hotfix": {
+      "name": "hotfix.md",
+      "content": "## Hotfix Description\n\n[Describe the critical issue and the hotfix]\n\n## Issue Severity\n\n- [ ] Critical production issue\n- [ ] Security vulnerability\n- [ ] Data loss/corruption risk\n- [ ] Service unavailability\n- [ ] Financial impact\n\n## Root Cause Analysis\n\n[Describe what caused the issue]\n\n## Fix Implementation\n\n[Describe the fix in detail]\n\n## Impact Assessment\n\n- **User Impact**: [Describe impact on users]\n- **System Impact**: [Describe impact on system]\n- **Business Impact**: [Describe business impact]\n\n## Testing Performed\n\n- [ ] Unit tests\n- [ ] Integration tests\n- [ ] Manual testing in staging\n- [ ] Production smoke tests planned\n\n## Deployment Plan\n\n- [ ] Database changes required\n- [ ] Cache invalidation needed\n- [ ] Service restart required\n- [ ] Zero-downtime deployment possible\n- [ ] Maintenance window required\n\n## Monitoring\n\n- [ ] Additional monitoring enabled\n- [ ] Alerts configured\n- [ ] Dashboards updated\n- [ ] Runbook updated\n\n## Post-Deployment Verification\n\n- [ ] Health checks passing\n- [ ] Key metrics normal\n- [ ] Error rates acceptable\n- [ ] User experience verified\n\n## Follow-up Actions\n\n- [ ] Post-mortem scheduled\n- [ ] Process improvements identified\n- [ ] Additional safeguards planned\n- [ ] Documentation updates needed"
+    }
+  }
+}

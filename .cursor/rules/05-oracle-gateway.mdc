@@ -1,0 +1,19 @@
+---
+globs: services/oracle-gw/**/*.ts
+description: Fastify-based Oracle Gateway rules (REST + WS, Chainlink subscriptions, caching, rate limits).
+---
+
+# Oracle Gateway Rules
+
+Kaynak: [MDC](mdc:docs/MDC.md), [TECH_STACK](mdc:docs/TECH_STACK.md)
+
+- **Runtime**: Node.js 20; Fastify + @fastify/websocket; Pino loglama
+- **API**: `/healthz`, `/readyz`, `/prices?symbol=ETHUSD` (JSON), WS `/stream`
+- **Veri Akışı**: Chainlink aboneliği -> normalize -> TWAP/median -> yayın
+- **Normalize**: Tüm değerler ortak hassasiyete (ör. 1e8) ve ISO8601 ts ile sunulsun
+- **Cache/Rate Limit**: Bellek içi cache + TTL; istemci başına hız limiti ve backpressure
+- **Dayanıklılık**: Oracle kesinti/timeout’larında son güvenli değer + işaret; veri tazeliği başlığında yaş bilgisini verin
+- **Konfig**: Feed adresleri env/konfig; hardcode yasak
+- **Loglama**: request‑id, corr‑id; PII loglama yok; hata sınıflandırması (warn/error)
+- **Test**: k6 ile WS concurrency (>=1K), latency ölçümü; entegrasyon testleri
+

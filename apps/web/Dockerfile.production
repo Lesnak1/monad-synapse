@@ -1,0 +1,111 @@
+# Production Dockerfile for Monad Synapse Casino Platform
+# Multi-stage build for optimized production image
+
+# =============================================================================
+# Stage 1: Dependencies
+# =============================================================================
+FROM node:20-alpine AS deps
+LABEL stage=deps
+
+# Set working directory
+WORKDIR /app
+
+# Install security updates
+RUN apk update && apk upgrade && apk add --no-cache libc6-compat
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production --ignore-scripts && \
+    npm cache clean --force && \
+    rm -rf ~/.npm
+
+# =============================================================================
+# Stage 2: Build
+# =============================================================================
+FROM node:20-alpine AS builder
+LABEL stage=builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache libc6-compat python3 make g++
+
+# Copy package files and install all dependencies (including devDependencies for build)
+COPY package*.json ./
+RUN npm ci --ignore-scripts && \
+    npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Set production environment for build
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the application
+RUN npm run build
+
+# =============================================================================
+# Stage 3: Production Runner
+# =============================================================================
+FROM node:20-alpine AS runner
+LABEL stage=runner
+
+WORKDIR /app
+
+# Install security updates and required packages
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    dumb-init \
+    curl \
+    ca-certificates && \
+    rm -rf /var/cache/apk/*
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Set production environment
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Copy built application from builder stage
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Copy package.json for runtime
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+
+# Set proper permissions
+RUN chown -R nextjs:nodejs /app
+RUN chmod -R 755 /app
+
+# Switch to non-root user
+USER nextjs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Expose port
+EXPOSE 3000
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "server.js"]
+
+# =============================================================================
+# Image metadata
+# =============================================================================
+LABEL maintainer="Monad Synapse Team"
+LABEL description="Monad Synapse Casino Platform - Production Image"
+LABEL version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/monad-synapse/casino-platform"
+LABEL org.opencontainers.image.licenses="MIT"

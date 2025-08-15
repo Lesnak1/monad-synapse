@@ -1,0 +1,221 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: 139 92 246; /* #8b5cf6 */
+}
+
+/* Fallback: sistem fontları (Geist dosyası bulunamazsa 404 engelle) */
+@font-face {
+  font-family: 'Geist';
+  src: local('Arial');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: local('Courier New');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+html, body {
+  height: 100%;
+}
+
+body { 
+  background-attachment: fixed;
+  color-scheme: dark;
+  background-color: #0B0217;
+}
+
+/* Dark Reader compatibility */
+html[data-darkreader-scheme="dark"] {
+  color-scheme: dark;
+}
+
+/* Force dark colors for better visibility */
+* {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Ensure text is visible in dark mode */
+.text-white {
+  color: white !important;
+}
+
+.text-white\/70 {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.text-white\/60 {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.text-white\/80 {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.glass { @apply backdrop-blur-md border shadow-glow bg-white/5 border-white/10; }
+
+.neon-button { @apply bg-gradient-to-r from-green-400 to-green-500 text-black font-bold px-6 py-3 rounded-xl shadow-lg hover:shadow-green-400/50 transition-all duration-300 hover:scale-105; }
+
+.casino-card { @apply bg-gradient-to-br from-purple-900/50 to-indigo-900/50 backdrop-blur-sm border border-purple-500/20 rounded-2xl p-6 hover:border-purple-400/40 transition-all duration-300; }
+
+.shadow-glow { box-shadow: 0 0 20px rgba(168, 85, 247, 0.3), 0 0 40px rgba(168, 85, 247, 0.1); }
+
+.floating-orb { animation: float 6s ease-in-out infinite; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(180deg); }
+}
+
+.lottery-ball { animation: bounce 2s ease-in-out infinite; }
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.text-gradient { @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400; }
+
+.text-neon { @apply text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]; }
+
+/* Enhanced Monad-themed animations */
+@keyframes gradient-x {
+  0%, 100% { transform: translateX(-50%) translateY(-50%) rotate(0deg); }
+  25% { transform: translateX(-50%) translateY(-50%) rotate(90deg); }
+  50% { transform: translateX(-50%) translateY(-50%) rotate(180deg); }
+  75% { transform: translateX(-50%) translateY(-50%) rotate(270deg); }
+}
+
+@keyframes gradient-text {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { 
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.4), 0 0 40px rgba(147, 51, 234, 0.2);
+  }
+  50% { 
+    box-shadow: 0 0 30px rgba(147, 51, 234, 0.6), 0 0 60px rgba(147, 51, 234, 0.3);
+  }
+}
+
+/* Animation utility classes */
+.animate-gradient-x {
+  animation: gradient-x 15s ease infinite;
+  background-size: 400% 400%;
+}
+
+.animate-gradient-text {
+  animation: gradient-text 3s ease infinite;
+  background-size: 200% 200%;
+}
+
+.animate-fade-in {
+  animation: fade-in 1s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 1s ease-out forwards;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 10s linear infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Monad-specific color gradients */
+.bg-monad-gradient {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 25%, #d946ef  50%, #06b6d4 75%, #3b82f6 100%);
+}
+
+.text-monad-gradient {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 25%, #d946ef 50%, #06b6d4 75%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Enhanced casino card with Monad theme */
+.casino-card-monad {
+  @apply relative bg-gradient-to-br from-purple-900/30 via-blue-900/20 to-indigo-900/30 
+         backdrop-blur-sm border border-purple-500/30 rounded-2xl p-6 
+         hover:border-purple-400/50 transition-all duration-300 overflow-hidden;
+}
+
+.casino-card-monad::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s;
+}
+
+.casino-card-monad:hover::before {
+  left: 100%;
+}
+
+/* Button enhancements */
+.neon-button-monad {
+  @apply relative bg-gradient-to-r from-purple-600 to-blue-600 
+         hover:from-purple-500 hover:to-blue-500 text-white font-bold 
+         px-6 py-3 rounded-xl transition-all duration-300 transform 
+         hover:scale-105 overflow-hidden;
+  box-shadow: 0 0 20px rgba(147, 51, 234, 0.3), 0 0 40px rgba(147, 51, 234, 0.1);
+}
+
+.neon-button-monad:hover {
+  box-shadow: 0 0 30px rgba(147, 51, 234, 0.5), 0 0 60px rgba(147, 51, 234, 0.2);
+}
+
+.neon-button-monad::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.7s;
+}
+
+.neon-button-monad:hover::before {
+  left: 100%;
+}
+
+

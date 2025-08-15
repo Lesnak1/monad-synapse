@@ -1,0 +1,22 @@
+---
+globs: apps/web/**/*.ts,apps/web/**/*.tsx
+description: Frontend rules (Next.js 14, wagmi/viem, shadcn/ui) for Monad Synapse.
+---
+
+# Frontend Rules
+
+Referanslar: [TECH_STACK](mdc:docs/TECH_STACK.md), [PRD](mdc:docs/PRD.md)
+
+- **Framework**: Next.js 14 App Router, TS strict, server components uygunsa kullanın
+- **Cüzdan**: wagmi v2 + viem + RainbowKit; ağ seçimi için kullanıcıyı Monad testnete yönlendirin
+- **Durum Yönetimi**: Minimal; server actions + swr/rt data ile basit tutun
+- **Gerçek Zamanlılık**: WS abonelikleri için reconnect/backoff; UI freeze engelleyin
+- **Grafikler**: Recharts/Visx; büyük serilerde sanallaştırma
+- **i18n**: Varsayılan İngilizce; TR dil desteği opsiyonel. Metinleri key‑bazlı yönetin
+- **Erişilebilirlik**: shadcn/ui ile a11y; odak, kontrast, tuş gezinimi
+- **Hata Yönetimi**: Error boundaries, boş durumlar, skeleton loading
+- **Performans**: Lazy/ISG/SSR karışımı; görüntü optimizasyonu; bundle ayrıştırma
+- **Güvenlik**: Kullanıcı girişi sanitize; cüzdan adreslerini kısaltarak gösterin; tx linkleri explorer’a
+- **Stil**: Tailwind katmanlı; utility first, tekrar eden desenleri bileşene taşıyın
+- **Analitik**: Sadece anonim, ücretsiz çözümler; kullanıcı verisi toplanmaz
+

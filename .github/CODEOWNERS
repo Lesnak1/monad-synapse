@@ -1,0 +1,213 @@
+# Code Owners for Monad Synapse Casino Platform
+# This file defines who must review specific files and directories
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global Owners - Platform Leads review everything by default
+* @platform-leads
+
+# =============================================================================
+# CORE APPLICATION
+# =============================================================================
+
+# Next.js Configuration
+next.config.mjs @platform-leads @developers
+middleware.ts @platform-leads @security-team
+
+# Package Management
+package*.json @platform-leads @developers
+tsconfig*.json @platform-leads @developers
+
+# Application Core
+/apps/web/app/ @platform-leads @developers
+/apps/web/components/ @developers
+/apps/web/lib/ @platform-leads @developers
+
+# =============================================================================
+# SECURITY CRITICAL FILES
+# =============================================================================
+
+# Authentication & Security
+/apps/web/lib/auth.ts @platform-leads @security-team
+/apps/web/lib/security*.ts @platform-leads @security-team
+/apps/web/lib/encryption.ts @platform-leads @security-team
+/apps/web/middleware.ts @platform-leads @security-team
+
+# Wallet & Blockchain Integration
+/apps/web/lib/*Wallet.ts @platform-leads @security-team
+/apps/web/lib/useGameContract.ts @platform-leads @security-team
+/apps/web/lib/multiSigManager.ts @platform-leads @security-team
+/apps/web/lib/transactionMonitor.ts @platform-leads @security-team
+
+# Game Engine & RNG
+/apps/web/lib/gameEngine.ts @platform-leads @security-team
+/apps/web/lib/secureRandom.ts @platform-leads @security-team
+
+# API Routes - Security Sensitive
+/apps/web/app/api/auth/ @platform-leads @security-team
+/apps/web/app/api/payout/ @platform-leads @security-team
+/apps/web/app/api/game/ @platform-leads @security-team
+/apps/web/app/api/security/ @platform-leads @security-team
+
+# =============================================================================
+# SMART CONTRACTS
+# =============================================================================
+
+# Solidity Smart Contracts
+/contracts/ @platform-leads @security-team
+/contracts/**/*.sol @platform-leads @security-team
+/contracts/foundry.toml @platform-leads @security-team
+
+# =============================================================================
+# CI/CD & DEVOPS
+# =============================================================================
+
+# GitHub Actions Workflows
+/.github/workflows/ @platform-leads @release-managers
+/.github/workflows/*.yml @platform-leads @release-managers
+
+# Docker Configuration
+Dockerfile* @platform-leads @release-managers
+docker-compose*.yml @platform-leads @release-managers
+ecosystem*.config.js @platform-leads @release-managers
+
+# Environment Configuration
+.env* @platform-leads @security-team
+apps/web/.env* @platform-leads @security-team
+
+# =============================================================================
+# TESTING
+# =============================================================================
+
+# Test Configuration
+jest.config.js @platform-leads @qa-team
+jest.setup.js @platform-leads @qa-team
+playwright*.config.js @platform-leads @qa-team
+
+# Critical Test Files
+/apps/web/__tests__/integration/ @platform-leads @qa-team
+/apps/web/__tests__/security/ @platform-leads @security-team @qa-team
+/apps/web/tests/poolScenarios.test.ts @platform-leads @security-team @qa-team
+
+# Game Tests
+/apps/web/__tests__/games/ @developers @qa-team
+
+# =============================================================================
+# DOCUMENTATION
+# =============================================================================
+
+# Technical Documentation
+/docs/ @platform-leads @developers
+README.md @platform-leads @developers
+SECURITY.md @platform-leads @security-team
+CONTRIBUTING.md @platform-leads @developers
+
+# Architecture Decision Records
+/docs/adr/ @platform-leads
+/docs/architecture/ @platform-leads
+
+# API Documentation
+/docs/api/ @platform-leads @developers
+
+# =============================================================================
+# CONFIGURATION FILES
+# =============================================================================
+
+# Linting and Code Quality
+.eslintrc* @platform-leads @developers
+.prettierrc* @platform-leads @developers
+tsconfig.json @platform-leads @developers
+
+# Build Configuration
+tailwind.config.ts @developers
+postcss.config.mjs @developers
+
+# Git Configuration
+.gitignore @platform-leads @developers
+.gitattributes @platform-leads @developers
+
+# =============================================================================
+# GAME SPECIFIC
+# =============================================================================
+
+# Game Components
+/apps/web/components/games/ @developers @qa-team
+/apps/web/app/games/ @developers @qa-team
+
+# Game Pages
+/apps/web/app/games/**/page.tsx @developers @qa-team
+
+# Secure Game Components
+/apps/web/components/games/*secure*.tsx @platform-leads @security-team
+
+# =============================================================================
+# INFRASTRUCTURE
+# =============================================================================
+
+# Kubernetes Manifests
+/k8s/ @platform-leads @release-managers
+/k8s/**/*.yml @platform-leads @release-managers
+/k8s/**/*.yaml @platform-leads @release-managers
+
+# Terraform Infrastructure
+/infrastructure/ @platform-leads @release-managers
+/infrastructure/**/*.tf @platform-leads @release-managers
+
+# Monitoring Configuration
+/config/prometheus/ @platform-leads @release-managers
+/config/grafana/ @platform-leads @release-managers
+/config/loki/ @platform-leads @release-managers
+
+# Nginx Configuration
+/config/nginx/ @platform-leads @release-managers
+
+# =============================================================================
+# SCRIPTS
+# =============================================================================
+
+# Deployment Scripts
+/scripts/deploy* @platform-leads @release-managers
+/scripts/backup* @platform-leads @release-managers
+/scripts/migration* @platform-leads @developers
+
+# Setup Scripts
+/scripts/setup* @platform-leads @developers
+/scripts/dev-* @developers
+
+# Security Scripts
+/scripts/security* @platform-leads @security-team
+
+# =============================================================================
+# SPECIAL FILES
+# =============================================================================
+
+# Code Owners File
+/.github/CODEOWNERS @platform-leads
+
+# Branch Protection Rules
+/.github/branch-protection.json @platform-leads
+
+# Issue and PR Templates
+/.github/ISSUE_TEMPLATE/ @platform-leads @developers
+/.github/pull_request_template* @platform-leads @developers
+
+# Security Policy
+/.github/SECURITY.md @platform-leads @security-team
+
+# License
+LICENSE @platform-leads
+
+# =============================================================================
+# TEAM ASSIGNMENTS
+# =============================================================================
+
+# Files that require security team approval
+*.key @platform-leads @security-team
+*.pem @platform-leads @security-team
+*.crt @platform-leads @security-team
+*secret* @platform-leads @security-team
+*password* @platform-leads @security-team
+
+# Files that require all platform leads
+*production* @platform-leads
+*staging* @platform-leads
+*deploy* @platform-leads @release-managers
