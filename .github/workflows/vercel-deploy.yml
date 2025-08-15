@@ -26,16 +26,31 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'apps/web/package-lock.json'
           
-      - name: Setup environment
+      - name: Setup environment files
         run: |
           cd apps/web
-          # Create .env file for build
-          echo "NEXTAUTH_SECRET=dummy-secret-for-build-only" > .env
-          echo "JWT_SECRET=dummy-jwt-secret-for-build-only" >> .env
-          echo "API_SECRET=dummy-api-secret-for-build-only" >> .env
-          echo "NEXT_PUBLIC_POOL_WALLET_ADDRESS=0x0000000000000000000000000000000000000000" >> .env
-          echo "NEXT_PUBLIC_APP_ENV=production" >> .env
-          echo "SKIP_ENV_VALIDATION=true" >> .env
+          # Create .env.local for build
+          cat > .env.local << EOF
+          NEXTAUTH_SECRET=dummy-secret-for-build-only-please-change-in-production
+          JWT_SECRET=dummy-jwt-secret-for-build-only-please-change-in-production
+          API_SECRET=dummy-api-secret-for-build-only-please-change-in-production
+          NEXT_PUBLIC_POOL_WALLET_ADDRESS=0x0000000000000000000000000000000000000000
+          NEXT_PUBLIC_APP_ENV=production
+          SKIP_ENV_VALIDATION=true
+          EOF
+          
+          # Create .env for build
+          cat > .env << EOF
+          NEXTAUTH_SECRET=dummy-secret-for-build-only-please-change-in-production
+          JWT_SECRET=dummy-jwt-secret-for-build-only-please-change-in-production
+          API_SECRET=dummy-api-secret-for-build-only-please-change-in-production
+          NEXT_PUBLIC_POOL_WALLET_ADDRESS=0x0000000000000000000000000000000000000000
+          NEXT_PUBLIC_APP_ENV=production
+          SKIP_ENV_VALIDATION=true
+          EOF
+          
+          echo "✅ Environment files created"
+          ls -la | grep env
           
       - name: Install dependencies
         run: |

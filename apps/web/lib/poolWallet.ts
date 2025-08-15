@@ -118,37 +118,62 @@ class EnhancedPoolManager extends EventEmitter {
    */
   async getPoolBalance(): Promise<number> {
     try {
-      // In production, would use secure wallet system
+      console.log('🔍 Getting pool balance...');
+      console.log('Pool address:', PUBLIC_POOL_ADDRESS);
+      console.log('Environment:', process.env.NODE_ENV);
+      console.log('Use secure wallet:', process.env.USE_SECURE_WALLET);
+      
+      // Always try to get actual blockchain balance first
+      if (PUBLIC_POOL_ADDRESS && PUBLIC_POOL_ADDRESS !== '' && PUBLIC_POOL_ADDRESS !== '0x0000000000000000000000000000000000000000') {
+        console.log('📡 Fetching balance from Monad blockchain...');
+        
+        try {
+          const balance = await publicClient.getBalance({
+            address: PUBLIC_POOL_ADDRESS,
+          });
+          const balanceEth = parseFloat(formatEther(balance));
+          
+          console.log('✅ Blockchain balance retrieved:', balanceEth, 'MON');
+          
+          // Check emergency conditions only if we have a real balance
+          if (balanceEth > 0) {
+            await this.checkEmergencyConditions(balance);
+          }
+          
+          return balanceEth;
+        } catch (blockchainError) {
+          console.error('❌ Blockchain balance fetch failed:', blockchainError);
+          // Continue to fallback
+        }
+      } else {
+        console.log('⚠️ No valid pool address configured');
+      }
+      
+      // In production, try secure wallet system
       if (process.env.NODE_ENV === 'production' || process.env.USE_SECURE_WALLET === 'true') {
         // Import secure wallet functions only on server-side
         if (typeof window === 'undefined') {
-          const { getSecurePoolBalance } = await import('./secureWallet');
-          const balance = await getSecurePoolBalance();
-          
-          // Check emergency conditions
-          await this.checkEmergencyConditions(parseEther(balance.toString()));
-          
-          return balance;
+          try {
+            const { getSecurePoolBalance } = await import('./secureWallet');
+            const balance = await getSecurePoolBalance();
+            
+            console.log('🔒 Secure wallet balance:', balance, 'MON');
+            
+            // Check emergency conditions
+            await this.checkEmergencyConditions(parseEther(balance.toString()));
+            
+            return balance;
+          } catch (secureWalletError) {
+            console.error('❌ Secure wallet balance fetch failed:', secureWalletError);
+          }
         }
       }
       
-      // Try to get actual blockchain balance for testnet
-      if (PUBLIC_POOL_ADDRESS) {
-        const balance = await publicClient.getBalance({
-          address: PUBLIC_POOL_ADDRESS,
-        });
-        const balanceEth = parseFloat(formatEther(balance));
-        
-        // Check emergency conditions
-        await this.checkEmergencyConditions(balance);
-        
-        return balanceEth;
-      }
-      
-      // Fallback for development
+      // Fallback for development - but warn user
+      console.warn('⚠️ Using fallback balance - configure NEXT_PUBLIC_POOL_WALLET_ADDRESS with real address');
       return this.fallbackPoolBalance;
     } catch (error) {
-      console.error('Error getting pool balance:', error);
+      console.error('❌ Error getting pool balance:', error);
       this.emit('security:alert', 'medium', `Failed to retrieve pool balance: ${(error as Error).message}`);
       return this.fallbackPoolBalance;
     }

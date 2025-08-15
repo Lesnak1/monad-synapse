@@ -65,13 +65,10 @@ export function useSecureGame() {
   ): Promise<GameResult> => {
     try {
       setIsLoading(true);
+      console.log('🎮 Starting game:', gameType, 'for player:', playerAddress);
 
       const clientSeed = generateClientSeed(gameType, playerAddress);
       const authToken = getAuthToken();
-
-      if (!authToken) {
-        throw new Error('Authentication required');
-      }
 
       const fullGameParams: GameParams = {
         betAmount: gameParams.betAmount || 0,
@@ -80,22 +77,44 @@ export function useSecureGame() {
         nonce: gameNonce
       };
 
+      console.log('📡 Game request params:', {
+        gameType,
+        gameParams: fullGameParams,
+        playerAddress,
+        hasAuthToken: !!authToken
+      });
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add auth token if available (optional for demo purposes)
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      } else {
+        // For demo/testnet, allow anonymous gameplay
+        headers['X-Demo-Play'] = 'true';
+        headers['X-Player-Address'] = playerAddress;
+        console.log('🎯 Playing in demo mode (no auth token)');
+      }
+
       const response = await fetch('/api/game/result', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
+        headers,
         body: JSON.stringify({
           gameType,
           gameParams: fullGameParams,
-          playerAddress
+          playerAddress,
+          demoMode: !authToken
         })
       });
 
+      console.log('📨 Game response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Game request failed');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Game request failed:', errorData);
+        throw new Error(errorData.error?.message || errorData.message || 'Game request failed');
       }
 
       const gameResult: GameResult = await response.json();

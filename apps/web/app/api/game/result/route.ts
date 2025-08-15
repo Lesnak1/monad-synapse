@@ -28,22 +28,34 @@ const gameRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   return trackApiCall('game_result', async () => {
     try {
-      // Authenticate request
-      const authResult = await authenticateRequest(request);
-      if (!authResult.isAuthenticated) {
-        return NextResponse.json({
-          success: false,
-          error: 'Authentication required',
-          details: authResult.error
-        }, { status: 401 });
-      }
+      console.log('🎮 Game result API called');
+      
+      // Check for demo mode
+      const isDemoMode = request.headers.get('X-Demo-Play') === 'true';
+      const demoPlayerAddress = request.headers.get('X-Player-Address');
+      
+      console.log('Demo mode:', isDemoMode, 'Player:', demoPlayerAddress);
 
-      // Check permissions
-      if (!requirePermission('game:result')(authResult.user!)) {
-        return NextResponse.json({
-          success: false,
-          error: 'Insufficient permissions'
-        }, { status: 403 });
+      if (!isDemoMode) {
+        // Authenticate request for production play
+        const authResult = await authenticateRequest(request);
+        if (!authResult.isAuthenticated) {
+          return NextResponse.json({
+            success: false,
+            error: 'Authentication required',
+            details: authResult.error
+          }, { status: 401 });
+        }
+
+        // Check permissions
+        if (!requirePermission('game:result')(authResult.user!)) {
+          return NextResponse.json({
+            success: false,
+            error: 'Insufficient permissions'
+          }, { status: 403 });
+        }
+      } else {
+        console.log('🎯 Demo mode enabled - skipping authentication');
       }
 
     const body = await request.json();
