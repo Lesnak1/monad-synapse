@@ -8,30 +8,49 @@ import { rateLimit } from './lib/auth';
  */
 
 function buildCsp(isDev: boolean): string {
-  const nonce = generateNonce();
+  // Very relaxed CSP for maximum Next.js and Web3 wallet compatibility
+  // In production, this should be tightened based on actual requirements
+  if (isDev) {
+    return [
+      "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: chrome-extension: moz-extension: webkit-extension:",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' chrome-extension: moz-extension: webkit-extension: blob: data:",
+      "style-src 'self' 'unsafe-inline' chrome-extension: moz-extension: webkit-extension: https://fonts.googleapis.com",
+      "img-src 'self' data: blob: https: http: chrome-extension: moz-extension: webkit-extension:",
+      "font-src 'self' data: chrome-extension: moz-extension: webkit-extension: https://fonts.gstatic.com",
+      "connect-src 'self' https: http: ws: wss: chrome-extension: moz-extension: webkit-extension: blob: data:",
+      "worker-src 'self' blob: chrome-extension: moz-extension: webkit-extension:",
+      "child-src 'self' chrome-extension: moz-extension: webkit-extension:",
+      "frame-src 'self' chrome-extension: moz-extension: webkit-extension: https:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'"
+    ].join('; ');
+  }
   
-  // Relaxed CSP for Next.js compatibility and Web3 wallet support
-  const script = `'self' 'unsafe-eval' 'unsafe-inline' 'nonce-${nonce}' chrome-extension: moz-extension: webkit-extension: blob: data:`;
-  
+  // Production CSP - still relaxed for Web3 compatibility
   return [
     "default-src 'self' chrome-extension: moz-extension: webkit-extension:",
-    `script-src ${script}`,
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' chrome-extension: moz-extension: webkit-extension: blob: data:",
     "style-src 'self' 'unsafe-inline' chrome-extension: moz-extension: webkit-extension: https://fonts.googleapis.com",
     "img-src 'self' data: blob: https: http: chrome-extension: moz-extension: webkit-extension:",
     "font-src 'self' data: chrome-extension: moz-extension: webkit-extension: https://fonts.gstatic.com",
-    // Enhanced connect-src for Web3 wallets and Monad testnet
     "connect-src 'self' https: http: ws: wss: chrome-extension: moz-extension: webkit-extension: blob: data: https://*.walletconnect.com https://*.walletconnect.org https://*.metamask.io https://*.infura.io https://*.alchemy.com https://*.coinbase.com https://*.trustwallet.com https://api.monad.xyz https://rpc.monad.xyz wss://rpc.monad.xyz",
     "worker-src 'self' blob: chrome-extension: moz-extension: webkit-extension:",
     "child-src 'self' chrome-extension: moz-extension: webkit-extension:",
     "frame-src 'self' chrome-extension: moz-extension: webkit-extension: https:",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'"
+    "form-action 'self'"
   ].join('; ');
 }
 
 export function middleware(request: NextRequest) {
+  // Safety check for request object
+  if (!request || !request.method || !request.nextUrl) {
+    console.warn('Invalid request object in middleware');
+    return NextResponse.next();
+  }
+
   const isHead = request.method === 'HEAD';
   const isDev = request.headers.get('host')?.includes('localhost') ?? true;
   const url = request.nextUrl.clone();
@@ -115,8 +134,8 @@ function setSecurityHeaders(response: NextResponse, request: NextRequest, isDev:
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
   
-  // Content Security Policy with Web3 wallet support
-  response.headers.set('Content-Security-Policy', buildCsp(isDev));
+  // Content Security Policy with Web3 wallet support - Temporarily disabled for debugging
+  // response.headers.set('Content-Security-Policy', buildCsp(isDev));
   
   // Cross-Origin Policies (essential for Web3 wallets)
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');

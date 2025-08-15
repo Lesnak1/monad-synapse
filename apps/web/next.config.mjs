@@ -14,6 +14,7 @@ const nextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
   generateEtags: true, // Enable ETags for better caching
   compress: true, // Enable gzip compression
+  reactStrictMode: false, // Disable strict mode for better wallet compatibility
 
   // Build optimization (swcMinify is default in Next.js 13+)
   
@@ -29,9 +30,22 @@ const nextConfig = {
       'localhost',
       'vercel.app',
       'monad-synapse.vercel.app',
+      'monad-synapse-web.vercel.app',
+      'monad-synapse-lesnak1.vercel.app',
+    ],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.vercel.app',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
     ],
     formats: ['image/webp', 'image/avif'],
     minimumCacheTTL: 60,
+    unoptimized: false,
   },
 
   // Webpack configuration for Web3 compatibility
