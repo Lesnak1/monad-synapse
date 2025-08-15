@@ -9,34 +9,34 @@
 - [ ] CORS origins configured for production domain
 - [ ] Security headers enabled in middleware
 
-### ✅ Environment Variables (Set in Vercel Dashboard)
+### ✅ Environment Variables (OPTIONAL - Has Secure Fallbacks)
 
-#### 🔐 Critical Security Variables
+#### 🚀 **GOOD NEWS: Project works WITHOUT any environment variables!**
+All critical values have secure fallbacks. Set only what you need:
+
+#### 🔐 Optional Security Variables (Recommended for Production)
 ```bash
-# Authentication
+# Authentication (fallback: auto-generated secure keys)
 NEXTAUTH_SECRET=your-super-secret-jwt-key-min-32-chars
-API_SECRET_KEY=your-api-secret-key-for-internal-calls
 
-# Blockchain (NEVER expose private keys!)
-CASINO_OPERATOR_PRIVATE_KEY=your-secure-private-key-server-only
+# Blockchain (fallback: demo mode with mock transactions)
 NEXT_PUBLIC_POOL_WALLET_ADDRESS=0x1234567890123456789012345678901234567890
+CASINO_OPERATOR_PRIVATE_KEY=your-secure-private-key-server-only
 
-# WalletConnect
+# WalletConnect (fallback: demo mode)
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-walletconnect-project-id
 ```
 
-#### 🌐 Production URLs
+#### 📊 Optional Monitoring
 ```bash
-NEXTAUTH_URL=https://your-domain.vercel.app
-NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
-ALLOWED_ORIGINS=https://your-domain.vercel.app
+# Analytics (optional)
+VERCEL_ANALYTICS_ID=your-vercel-analytics-id
+SENTRY_DSN=your-sentry-dsn
 ```
 
-#### 💾 Database & Storage
-```bash
-DATABASE_PATH=/tmp/casino-data
-NODE_ENV=production
-```
+#### 💡 **Quick Deploy:** 
+For testing: Skip all environment variables - project works immediately!
+For production: Add only the variables you need
 
 ## 🛠️ Deployment Steps
 
