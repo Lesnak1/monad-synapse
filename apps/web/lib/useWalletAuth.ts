@@ -28,7 +28,7 @@ export function useWalletAuth() {
     if (isConnected && address && !isAuthenticated && !isAuthenticating) {
       authenticate();
     }
-  }, [isConnected, address, isAuthenticated, isAuthenticating]);
+  }, [isConnected, address, isAuthenticated, isAuthenticating]); // Remove authenticate to avoid hoisting
 
   const authenticate = useCallback(async () => {
     if (!address || !isConnected) {

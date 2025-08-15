@@ -123,8 +123,8 @@ class EnhancedPoolManager extends EventEmitter {
       console.log('Environment:', process.env.NODE_ENV);
       console.log('Use secure wallet:', process.env.USE_SECURE_WALLET);
       
-      // Always try to get actual blockchain balance first
-      if (PUBLIC_POOL_ADDRESS && PUBLIC_POOL_ADDRESS !== '' && PUBLIC_POOL_ADDRESS !== '0x0000000000000000000000000000000000000000') {
+      // Always try to get actual blockchain balance first  
+      if (PUBLIC_POOL_ADDRESS && PUBLIC_POOL_ADDRESS.length > 0 && PUBLIC_POOL_ADDRESS !== '0x0000000000000000000000000000000000000000') {
         console.log('📡 Fetching balance from Monad blockchain...');
         
         try {

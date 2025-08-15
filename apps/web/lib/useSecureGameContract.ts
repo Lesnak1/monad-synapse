@@ -335,7 +335,7 @@ export function useSecureGameContract() {
         }
       }, 1000);
     }
-  }, [address, isConnected]); // Simplified to avoid hoisting issues - functions will be available when needed
+  }, [address, isConnected, currentSession, gameState, isTransacting]); // Simplified to avoid hoisting issues
 
   /**
    * Process game result with validation
