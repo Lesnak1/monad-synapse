@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useGameContract } from '@/lib/useGameContract';
 import { BET_LIMITS } from '@/lib/poolWallet';
 import { useSecureGame } from '@/lib/useSecureGame';
+import { useWalletAuth } from '@/lib/useWalletAuth';
 import { toast } from 'react-hot-toast';
 
 export function CrashGame() {
@@ -32,18 +33,40 @@ export function CrashGame() {
   const gameStartTime = useRef<number>(0);
 
   const { playGame } = useSecureGame();
+  const { isAuthenticated, isAuthenticating, authenticate } = useWalletAuth();
 
   const generateCrashPoint = async () => {
-    // Use secure server-side game logic
-    if (!address) return 2.0;
+    // Ensure wallet is connected and authenticated
+    if (!address || !isConnected) {
+      toast.error('Please connect your wallet to play');
+      return 2.0;
+    }
+
+    if (!isAuthenticated) {
+      toast.error('Please authenticate your wallet to play games');
+      if (!isAuthenticating) {
+        authenticate();
+      }
+      return 2.0;
+    }
     
-    const gameResult = await playGame('crash', address, {
-      betAmount: bet,
-      multiplier: 2.0 // Default auto cash out
-    });
-    
-    if (gameResult.success && gameResult.result) {
-      return (gameResult.result as any).crashPoint || 2.0;
+    try {
+      const gameResult = await playGame('crash', address, {
+        betAmount: bet,
+        multiplier: cashOutAt || 2.0
+      });
+      
+      if (gameResult.success && gameResult.result) {
+        return (gameResult.result as any).crashPoint || 2.0;
+      } else {
+        console.error('Game failed:', gameResult.error);
+        toast.error(gameResult.error?.message || 'Game execution failed');
+        return 2.0;
+      }
+    } catch (error: any) {
+      console.error('Game error:', error);
+      toast.error(error.message || 'Game failed');
+      return 2.0;
     }
     
     return 2.0; // Fallback

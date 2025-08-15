@@ -28,34 +28,30 @@ const gameRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   return trackApiCall('game_result', async () => {
     try {
-      console.log('🎮 Game result API called');
+      console.log('🎮 Game result API called - Production Mode');
       
-      // Check for demo mode
-      const isDemoMode = request.headers.get('X-Demo-Play') === 'true';
-      const demoPlayerAddress = request.headers.get('X-Player-Address');
-      
-      console.log('Demo mode:', isDemoMode, 'Player:', demoPlayerAddress);
+      // Production authentication required
+      const authResult = await authenticateRequest(request);
+      if (!authResult.isAuthenticated) {
+        console.log('❌ Authentication failed:', authResult.error);
+        return NextResponse.json({
+          success: false,
+          error: 'Authentication required - Please connect wallet and sign message',
+          details: authResult.error,
+          code: 'AUTH_REQUIRED'
+        }, { status: 401 });
+      }
 
-      if (!isDemoMode) {
-        // Authenticate request for production play
-        const authResult = await authenticateRequest(request);
-        if (!authResult.isAuthenticated) {
-          return NextResponse.json({
-            success: false,
-            error: 'Authentication required',
-            details: authResult.error
-          }, { status: 401 });
-        }
+      console.log('✅ User authenticated:', authResult.user);
 
-        // Check permissions
-        if (!requirePermission('game:result')(authResult.user!)) {
-          return NextResponse.json({
-            success: false,
-            error: 'Insufficient permissions'
-          }, { status: 403 });
-        }
-      } else {
-        console.log('🎯 Demo mode enabled - skipping authentication');
+      // Check permissions
+      if (!requirePermission('game:result')(authResult.user!)) {
+        console.log('❌ Insufficient permissions for user');
+        return NextResponse.json({
+          success: false,
+          error: 'Insufficient permissions for gameplay',
+          code: 'INSUFFICIENT_PERMISSIONS'
+        }, { status: 403 });
       }
 
     const body = await request.json();

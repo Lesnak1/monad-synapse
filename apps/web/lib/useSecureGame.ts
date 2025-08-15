@@ -51,7 +51,20 @@ export function useSecureGame() {
   const [gameNonce, setGameNonce] = useState(1);
 
   const getAuthToken = useCallback(() => {
-    return localStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken');
+    const expiry = localStorage.getItem('authExpiry');
+    const address = localStorage.getItem('authAddress');
+    
+    // Check if token is expired
+    if (token && expiry && Date.now() > parseInt(expiry)) {
+      console.log('🕐 Auth token expired, clearing...');
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authExpiry');
+      localStorage.removeItem('authAddress');
+      return null;
+    }
+    
+    return token;
   }, []);
 
   const generateClientSeed = useCallback((gameType: string, playerAddress: string) => {
@@ -84,19 +97,15 @@ export function useSecureGame() {
         hasAuthToken: !!authToken
       });
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
-
-      // Add auth token if available (optional for demo purposes)
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      } else {
-        // For demo/testnet, allow anonymous gameplay
-        headers['X-Demo-Play'] = 'true';
-        headers['X-Player-Address'] = playerAddress;
-        console.log('🎯 Playing in demo mode (no auth token)');
+      // Production authentication required
+      if (!authToken) {
+        throw new Error('Authentication required - Please connect wallet and sign message to play games');
       }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      };
 
       const response = await fetch('/api/game/result', {
         method: 'POST',
@@ -104,8 +113,7 @@ export function useSecureGame() {
         body: JSON.stringify({
           gameType,
           gameParams: fullGameParams,
-          playerAddress,
-          demoMode: !authToken
+          playerAddress
         })
       });
 
