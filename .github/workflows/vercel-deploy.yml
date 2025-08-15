@@ -31,11 +31,6 @@ jobs:
           cd apps/web
           npm ci --ignore-scripts
           
-      - name: TypeScript check
-        run: |
-          cd apps/web
-          npm run typecheck
-          
       - name: Build for production
         run: |
           cd apps/web

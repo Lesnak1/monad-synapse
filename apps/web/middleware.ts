@@ -10,10 +10,8 @@ import { rateLimit } from './lib/auth';
 function buildCsp(isDev: boolean): string {
   const nonce = generateNonce();
   
-  // Enhanced CSP for browser extensions and Web3 compatibility
-  const script = isDev 
-    ? `'self' 'unsafe-eval' 'unsafe-inline' 'nonce-${nonce}' chrome-extension: moz-extension: webkit-extension: blob:` 
-    : `'self' 'nonce-${nonce}' chrome-extension: moz-extension: webkit-extension:`;
+  // Relaxed CSP for Next.js compatibility and Web3 wallet support
+  const script = `'self' 'unsafe-eval' 'unsafe-inline' 'nonce-${nonce}' chrome-extension: moz-extension: webkit-extension: blob: data:`;
   
   return [
     "default-src 'self' chrome-extension: moz-extension: webkit-extension:",
@@ -29,8 +27,7 @@ function buildCsp(isDev: boolean): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
-    ...(isDev ? [] : ["upgrade-insecure-requests"])
+    "frame-ancestors 'none'"
   ].join('; ');
 }
 
