@@ -40,7 +40,8 @@
       "Bash(mv:*)",
       "Bash(gh run list:*)",
       "WebFetch(domain:monad-synapse-web.vercel.app)",
-      "WebFetch(domain:vercel.com)"
+      "WebFetch(domain:vercel.com)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: 'Invalid login parameters',
-        details: validation.error.issues
+        details: validation.error.issues,
+        timestamp: Date.now()
       }, { status: 400 });
     }
 
@@ -42,6 +43,18 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login error:', error);
+    
+    // Handle JSON parsing errors differently
+    if (error instanceof SyntaxError) {
+      console.log('🔍 Returning 400 for SyntaxError');
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid JSON payload',
+        timestamp: Date.now()
+      }, { status: 400 });
+    }
+    
+    console.log('🔍 Not a SyntaxError, returning 401');
     return NextResponse.json({
       success: false,
       error: error.message || 'Authentication failed',

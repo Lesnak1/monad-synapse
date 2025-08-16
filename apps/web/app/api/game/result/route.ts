@@ -81,7 +81,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         success: false, 
         error: 'Invalid request parameters',
-        details: validationResult.error.issues
+        details: validationResult.error.issues,
+        timestamp: Date.now()
       }, { status: 400 });
     }
 
@@ -100,7 +101,8 @@ export async function POST(request: NextRequest) {
       console.error('❌ Invalid client seed format');
       return NextResponse.json({ 
         success: false, 
-        error: 'Invalid client seed format' 
+        error: 'Invalid client seed format',
+        timestamp: Date.now()
       }, { status: 400 });
     }
 
@@ -114,7 +116,8 @@ export async function POST(request: NextRequest) {
       console.error('❌ Invalid nonce value');
       return NextResponse.json({ 
         success: false, 
-        error: 'Invalid nonce value' 
+        error: 'Invalid nonce value',
+        timestamp: Date.now()
       }, { status: 400 });
     }
 
