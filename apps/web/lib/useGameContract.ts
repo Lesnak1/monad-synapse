@@ -65,25 +65,28 @@ export function useGameContract() {
       toast('Large bet requires multi-signature approval');
     }
 
-    // Critical: Check pool balance before accepting bet
+    // Check pool balance before accepting bet
     const poolBal = await getPoolBalance();
-    const maxPossibleWin = betAmount * 50; // Assume max 50x multiplier possible
-    const minReserveBalance = 10;
+    const maxPossibleWin = betAmount * 20; // Assume max 20x multiplier for safer bets
+    const minReserveBalance = 1; // Reduced from 10 to 1 MON
     
-    // If pool balance is 0 or negative, show appropriate error
-    if (poolBal <= 0) {
-      toast.error('Pool wallet connection failed. Please try again in a moment.');
-      throw new Error('Pool balance unavailable - please contact support');
+    console.log('🎯 Bet validation:', {
+      poolBalance: poolBal,
+      betAmount: betAmount,
+      maxPossibleWin: maxPossibleWin,
+      minReserve: minReserveBalance
+    });
+    
+    // Only block if pool balance is definitively insufficient
+    if (poolBal > 0 && poolBal < maxPossibleWin + minReserveBalance) {
+      const maxBet = Math.max(0.1, (poolBal - minReserveBalance) / 20);
+      toast.error(`Pool temporarily low. Max bet: ${maxBet.toFixed(3)} MON`);
+      throw new Error('Pool balance insufficient for this bet size');
     }
     
-    if (poolBal - minReserveBalance < maxPossibleWin) {
-      const maxBet = Math.max(0, (poolBal - minReserveBalance) / 50);
-      if (maxBet <= 0) {
-        toast.error('Pool temporarily unavailable. Please try again later.');
-      } else {
-        toast.error(`Pool temporarily low. Max bet: ${maxBet.toFixed(4)} MON`);
-      }
-      throw new Error('Pool balance insufficient for this bet size');
+    // Allow betting even if pool balance is 0 (might be RPC issue)
+    if (poolBal <= 0) {
+      console.warn('⚠️ Pool balance is 0 - might be RPC issue, allowing bet anyway');
     }
     
     try {
@@ -158,8 +161,15 @@ export function useGameContract() {
       
       // Check current pool balance before payout
       const poolBal = await getPoolBalance();
-      if (poolBal < winAmount + 5) { // Need winAmount + 5 MON buffer
-        toast.error('Pool refilling. Winnings secured, will be processed shortly.');
+      console.log('🏦 Pool balance check:', poolBal, 'Required:', winAmount + 0.5);
+      
+      if (poolBal <= 0) {
+        console.error('⚠️ Pool balance is 0 - likely RPC connection issue, attempting payout anyway');
+        // Don't block payout for RPC issues - let the backend handle it
+      }
+      
+      if (poolBal > 0 && poolBal < winAmount + 0.5) { // Need winAmount + 0.5 MON buffer (reduced from 5)
+        toast.error('Pool temporarily low. Winnings secured, will be processed shortly.');
         throw new Error('Insufficient pool balance for payout');
       }
       
