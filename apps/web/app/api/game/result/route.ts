@@ -10,7 +10,7 @@ import { addGameRecord } from '@/lib/gameStats';
 
 // Input validation schema
 const gameRequestSchema = z.object({
-  gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip', 'roulette', 'blackjack', 'baccarat', 'keno', 'lottery', 'tower', 'spin-win', 'limbo']),
+  gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip', 'coin-master', 'roulette', 'blackjack', 'baccarat', 'keno', 'lottery', 'tower', 'spin-win', 'limbo']),
   gameParams: z.object({
     betAmount: z.number().min(0.1).max(1000),
     clientSeed: z.string().min(8).max(64).regex(/^[a-zA-Z0-9]+$/),
@@ -218,6 +218,45 @@ export async function POST(request: NextRequest) {
         };
         break;
 
+      case 'coin-master':
+        // Coin Master style slot machine with multiple symbols
+        const coinMasterSymbols = ['🍒', '🍋', '🍊', '🍇', '⭐', '💎', '🎰', '🔔'];
+        const coinMasterReels = [];
+        
+        // Generate 3 reels with random symbols
+        for (let i = 0; i < 3; i++) {
+          const reelRoll = gameRandom.dice(gameParams.clientSeed, gameParams.nonce + i);
+          const symbolIndex = Math.floor(reelRoll / 100 * coinMasterSymbols.length);
+          coinMasterReels.push(coinMasterSymbols[symbolIndex]);
+        }
+        
+        // Check for wins
+        const uniqueSymbols = new Set(coinMasterReels).size;
+        let coinMasterMultiplier = 0;
+        
+        if (uniqueSymbols === 1) {
+          // All 3 same symbols
+          const symbol = coinMasterReels[0];
+          if (symbol === '💎') coinMasterMultiplier = 10;
+          else if (symbol === '⭐') coinMasterMultiplier = 5;
+          else if (symbol === '🎰') coinMasterMultiplier = 3;
+          else coinMasterMultiplier = 2;
+        } else if (uniqueSymbols === 2) {
+          // 2 matching symbols
+          coinMasterMultiplier = 1.5;
+        }
+        
+        isWin = coinMasterMultiplier > 0;
+        winAmount = isWin ? gameParams.betAmount * coinMasterMultiplier : 0;
+        
+        gameResult = {
+          spinResult: coinMasterReels,
+          symbols: coinMasterReels,
+          multiplier: coinMasterMultiplier,
+          isWin
+        };
+        break;
+
       case 'slots':
         const slotResults = gameRandom.slots(gameParams.clientSeed, gameParams.nonce, 5, 10);
         // Simple win detection - 3 matching symbols
@@ -260,11 +299,11 @@ export async function POST(request: NextRequest) {
 
       case 'sweet-bonanza':
         // Generate secure 6x5 grid
-        const symbols = ['🍭', '🍌', '🍇', '🍒', '🍊', '🟦', '🟪', '🔴'];
+        const bonanzaSymbols = ['🍭', '🍌', '🍇', '🍒', '🍊', '🟦', '🟪', '🔴'];
         const gridResults = [];
         for (let i = 0; i < 30; i++) { // 6x5 = 30 positions
           const secureRoll = secureRandom.generateSecureRandom(gameParams.clientSeed, gameParams.nonce + i);
-          gridResults.push(symbols[Math.floor(secureRoll.value * symbols.length)]);
+          gridResults.push(bonanzaSymbols[Math.floor(secureRoll.value * bonanzaSymbols.length)]);
         }
         
         const grid = [];
