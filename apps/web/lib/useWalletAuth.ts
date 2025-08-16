@@ -23,13 +23,6 @@ export function useWalletAuth() {
     }
   }, [address, isConnected]);
 
-  // Auto-authenticate when wallet connects
-  useEffect(() => {
-    if (isConnected && address && !isAuthenticated && !isAuthenticating) {
-      authenticate();
-    }
-  }, [isConnected, address, isAuthenticated, isAuthenticating]); // Remove authenticate to avoid hoisting
-
   const authenticate = useCallback(async () => {
     if (!address || !isConnected) {
       toast.error('Please connect your wallet first');
@@ -109,6 +102,13 @@ export function useWalletAuth() {
       setIsAuthenticating(false);
     }
   }, [address, isConnected, signMessageAsync, isAuthenticating]);
+
+  // Auto-authenticate when wallet connects
+  useEffect(() => {
+    if (isConnected && address && !isAuthenticated && !isAuthenticating) {
+      authenticate();
+    }
+  }, [isConnected, address, isAuthenticated, isAuthenticating, authenticate]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('authToken');

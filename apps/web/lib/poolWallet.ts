@@ -67,12 +67,25 @@ const PUBLIC_POOL_ADDRESS = (process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS || '').
 const FALLBACK_POOL_ADDRESS = '0x1234567890123456789012345678901234567890' as `0x${string}`;
 export const POOL_WALLET_ADDRESS = PUBLIC_POOL_ADDRESS || FALLBACK_POOL_ADDRESS;
 
+// Create multiple clients for failover
 export const publicClient = createPublicClient({
   chain: monadTestnet,
   transport: http(monadTestnet.rpcUrls.default.http[0], {
+    timeout: 30000, // 30 second timeout
+    retryCount: 3,
+    retryDelay: 1000,
+    batch: false
+  }),
+});
+
+// Backup client with different RPC endpoint
+const backupClient = createPublicClient({
+  chain: monadTestnet,
+  transport: http(monadTestnet.rpcUrls.public.http[2], { // Use testnet-rpc.monad.xyz
     timeout: 30000,
     retryCount: 3,
-    batch: true
+    retryDelay: 1000,
+    batch: false
   }),
 });
 
@@ -121,61 +134,74 @@ class EnhancedPoolManager extends EventEmitter {
       console.log('🔍 Getting pool balance...');
       console.log('Pool address:', PUBLIC_POOL_ADDRESS);
       console.log('Environment:', process.env.NODE_ENV);
-      console.log('Use secure wallet:', process.env.USE_SECURE_WALLET);
       
       // Always try to get actual blockchain balance first  
       if (PUBLIC_POOL_ADDRESS && PUBLIC_POOL_ADDRESS.length > 0 && PUBLIC_POOL_ADDRESS !== '0x0000000000000000000000000000000000000000') {
         console.log('📡 Fetching balance from Monad blockchain...');
+        console.log('Using pool address:', PUBLIC_POOL_ADDRESS);
         
-        try {
-          const balance = await publicClient.getBalance({
-            address: PUBLIC_POOL_ADDRESS,
-          });
-          const balanceEth = parseFloat(formatEther(balance));
-          
-          console.log('✅ Blockchain balance retrieved:', balanceEth, 'MON');
-          
-          // Check emergency conditions only if we have a real balance
-          if (balanceEth > 0) {
-            await this.checkEmergencyConditions(balance);
-          }
-          
-          return balanceEth;
-        } catch (blockchainError) {
-          console.error('❌ Blockchain balance fetch failed:', blockchainError);
-          // Continue to fallback
-        }
-      } else {
-        console.log('⚠️ No valid pool address configured');
-      }
-      
-      // In production, try secure wallet system
-      if (process.env.NODE_ENV === 'production' || process.env.USE_SECURE_WALLET === 'true') {
-        // Import secure wallet functions only on server-side
-        if (typeof window === 'undefined') {
+        // Try multiple RPC endpoints for better reliability
+        const clients = [publicClient, backupClient];
+        const rpcEndpoints = [
+          monadTestnet.rpcUrls.default.http[0],
+          monadTestnet.rpcUrls.public.http[2]
+        ];
+        
+        for (let i = 0; i < clients.length; i++) {
           try {
-            const { getSecurePoolBalance } = await import('./secureWallet');
-            const balance = await getSecurePoolBalance();
+            console.log(`🔄 Trying RPC endpoint ${i + 1}/${clients.length}: ${rpcEndpoints[i]}`);
             
-            console.log('🔒 Secure wallet balance:', balance, 'MON');
+            const balance = await clients[i].getBalance({
+              address: PUBLIC_POOL_ADDRESS,
+            });
+            const balanceEth = parseFloat(formatEther(balance));
+            
+            console.log(`✅ Blockchain balance retrieved from endpoint ${i + 1}:`, balanceEth, 'MON');
             
             // Check emergency conditions
-            await this.checkEmergencyConditions(parseEther(balance.toString()));
+            await this.checkEmergencyConditions(balance);
             
-            return balance;
-          } catch (secureWalletError) {
-            console.error('❌ Secure wallet balance fetch failed:', secureWalletError);
+            return balanceEth;
+          } catch (endpointError) {
+            console.error(`❌ RPC endpoint ${i + 1} failed:`, endpointError);
+            
+            // If this is the last endpoint, throw the error
+            if (i === clients.length - 1) {
+              console.error('Full error details for final attempt:', {
+                message: endpointError instanceof Error ? endpointError.message : endpointError,
+                stack: endpointError instanceof Error ? endpointError.stack : undefined,
+                poolAddress: PUBLIC_POOL_ADDRESS,
+                rpcUrl: rpcEndpoints[i],
+                endpointAttempted: i + 1,
+                totalEndpoints: clients.length
+              });
+              throw new Error(`All RPC endpoints failed. Last error: ${endpointError instanceof Error ? endpointError.message : 'Unknown error'}`);
+            }
+            
+            // Continue to next endpoint
+            console.log(`⏭️  Trying next RPC endpoint...`);
           }
         }
+        
+        // If we reach here, all endpoints failed but we didn't throw
+        throw new Error('All RPC endpoints failed');
+      } else {
+        console.log('⚠️ No valid pool address configured');
+        throw new Error('Pool wallet address not configured - set NEXT_PUBLIC_POOL_WALLET_ADDRESS environment variable');
       }
-      
-      // Fallback for development - but warn user
-      console.warn('⚠️ Using fallback balance - configure NEXT_PUBLIC_POOL_WALLET_ADDRESS with real address');
-      return this.fallbackPoolBalance;
     } catch (error) {
       console.error('❌ Error getting pool balance:', error);
-      this.emit('security:alert', 'medium', `Failed to retrieve pool balance: ${(error as Error).message}`);
-      return this.fallbackPoolBalance;
+      this.emit('security:alert', 'critical', `Failed to retrieve pool balance: ${(error as Error).message}`);
+      
+      // Only use fallback in development, not production
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Using fallback balance in DEVELOPMENT only');
+        return this.fallbackPoolBalance;
+      } else {
+        // In production, return 0 to indicate error rather than mock data
+        console.error('🚨 PRODUCTION: Cannot fetch real pool balance - returning 0');
+        return 0;
+      }
     }
   }
 

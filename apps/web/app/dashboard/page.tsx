@@ -1,23 +1,123 @@
 'use client';
 
 import { PriceStream } from '@/components/price-stream';
+import { useUserStats } from '@/lib/useUserStats';
+import { useWalletAuth } from '@/lib/useWalletAuth';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-  const quickStats = [
-    { label: 'Total Balance', value: '12,542.500 MON', change: '+5.2%', icon: '💰', color: 'text-green-400' },
-    { label: 'Today\'s Profit', value: '847.200 MON', change: '+12.1%', icon: '📈', color: 'text-emerald-400' },
-    { label: 'Games Played', value: '47', change: '+8', icon: '🎮', color: 'text-blue-400' },
-    { label: 'Win Rate', value: '67.2%', change: '+3.1%', icon: '🏆', color: 'text-purple-400' }
+  const { stats, isLoading, error, refreshStats } = useUserStats();
+  const { isConnected, isAuthenticated, authenticate } = useWalletAuth();
+
+  // Show authentication prompt if not connected/authenticated
+  if (!isConnected || !isAuthenticated) {
+    return (
+      <main className="min-h-screen pt-8 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center px-4">
+          <div className="casino-card p-8">
+            <div className="text-6xl mb-4">🎮</div>
+            <h1 className="text-2xl font-bold text-white mb-4">Connect Your Wallet</h1>
+            <p className="text-white/70 mb-6">
+              Connect your wallet and sign the authentication message to view your personal gaming dashboard.
+            </p>
+            {isConnected && !isAuthenticated && (
+              <button 
+                onClick={authenticate}
+                className="neon-button w-full py-3"
+              >
+                Authenticate Wallet
+              </button>
+            )}
+            {!isConnected && (
+              <p className="text-white/50 text-sm">
+                Use the wallet button in the navigation to connect.
+              </p>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Show loading state
+  if (isLoading && !stats) {
+    return (
+      <main className="min-h-screen pt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gradient mb-8">Dashboard</h1>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="casino-card p-6 animate-pulse">
+                <div className="h-8 bg-white/10 rounded mb-3"></div>
+                <div className="h-6 bg-white/10 rounded mb-2"></div>
+                <div className="h-4 bg-white/10 rounded"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Show error state
+  if (error && !stats) {
+    return (
+      <main className="min-h-screen pt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="casino-card p-8 text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h2 className="text-xl font-bold text-white mb-4">Failed to Load Dashboard</h2>
+            <p className="text-white/70 mb-6">{error}</p>
+            <button 
+              onClick={refreshStats}
+              className="neon-button px-6 py-3"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Default stats while loading or if no stats available
+  const quickStats = stats ? [
+    { 
+      label: 'Total Balance', 
+      value: `${stats.totalBalance} MON`, 
+      change: stats.todayProfitChange, 
+      icon: '💰', 
+      color: stats.todayProfitChange.startsWith('+') ? 'text-green-400' : 'text-red-400' 
+    },
+    { 
+      label: 'Today\'s Profit', 
+      value: `${stats.todayProfit} MON`, 
+      change: stats.todayProfitChange, 
+      icon: '📈', 
+      color: stats.todayProfitChange.startsWith('+') ? 'text-emerald-400' : 'text-red-400' 
+    },
+    { 
+      label: 'Games Played', 
+      value: `${stats.gamesPlayed}`, 
+      change: stats.gamesPlayedChange > 0 ? `+${stats.gamesPlayedChange}` : `${stats.gamesPlayedChange}`, 
+      icon: '🎮', 
+      color: 'text-blue-400' 
+    },
+    { 
+      label: 'Win Rate', 
+      value: `${stats.winRate.toFixed(1)}%`, 
+      change: stats.winRateChange > 0 ? `+${stats.winRateChange.toFixed(1)}%` : `${stats.winRateChange.toFixed(1)}%`, 
+      icon: '🏆', 
+      color: stats.winRateChange >= 0 ? 'text-purple-400' : 'text-red-400' 
+    }
+  ] : [
+    { label: 'Total Balance', value: '0.000 MON', change: '0%', icon: '💰', color: 'text-gray-400' },
+    { label: 'Today\'s Profit', value: '0.000 MON', change: '0%', icon: '📈', color: 'text-gray-400' },
+    { label: 'Games Played', value: '0', change: '0', icon: '🎮', color: 'text-gray-400' },
+    { label: 'Win Rate', value: '0%', change: '0%', icon: '🏆', color: 'text-gray-400' }
   ];
 
-  const recentGames = [
-    { game: 'Coin Master', bet: '0.1500 MON', result: 'Win', profit: '+0.3456 MON', time: '2 min ago', multiplier: '2.3x' },
-    { game: 'Crash', bet: '0.5000 MON', result: 'Win', profit: '+1.8000 MON', time: '5 min ago', multiplier: '3.6x' },
-    { game: 'Plinko', bet: '0.2000 MON', result: 'Loss', profit: '-0.2000 MON', time: '8 min ago', multiplier: '0x' },
-    { game: 'Wheel', bet: '0.3000 MON', result: 'Win', profit: '+0.9000 MON', time: '12 min ago', multiplier: '3.0x' },
-    { game: 'Mines', bet: '0.1000 MON', result: 'Win', profit: '+0.4000 MON', time: '15 min ago', multiplier: '4.0x' }
-  ];
+  const recentGames = stats?.recentGames || [];
 
   const topGames = [
     { name: 'COIN MASTER', icon: '🪙', players: '1,234', jackpot: '12,500 MON' },
@@ -30,8 +130,19 @@ export default function DashboardPage() {
     <main className="min-h-screen pt-8">
       {/* Header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-4xl font-bold text-gradient mb-2">Dashboard</h1>
-        <p className="text-white/70 text-sm sm:text-base">Welcome back! Here\'s your gaming overview and live market data.</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl sm:text-4xl font-bold text-gradient mb-2">Dashboard</h1>
+            <p className="text-white/70 text-sm sm:text-base">Welcome back! Here\'s your personal gaming overview and live market data.</p>
+          </div>
+          <button 
+            onClick={refreshStats}
+            disabled={isLoading}
+            className="neon-button px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {isLoading ? '🔄' : '↻'} Refresh
+          </button>
+        </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6 sm:space-y-8">
@@ -71,7 +182,7 @@ export default function DashboardPage() {
                   <div>TIME</div>
                 </div>
                 
-                {recentGames.map((game, i) => (
+                {recentGames.length > 0 ? recentGames.map((game, i) => (
                   <div key={i} className="grid grid-cols-6 gap-4 items-center py-3 border-b border-white/10">
                     <div className="text-white font-medium">{game.game}</div>
                     <div className="text-white/70">{game.bet}</div>
@@ -82,9 +193,17 @@ export default function DashboardPage() {
                       game.profit.startsWith('+') ? 'text-green-400' : 'text-red-400'
                     }`}>{game.profit}</div>
                     <div className="text-white/70">{game.multiplier}</div>
-                    <div className="text-white/50 text-xs">{game.time}</div>
+                    <div className="text-white/50 text-xs">{game.timeAgo}</div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-8 text-white/70">
+                    <div className="text-4xl mb-4">🎮</div>
+                    <p>No games played yet</p>
+                    <Link href="/games" className="text-green-400 hover:text-green-300 text-sm">
+                      Start playing to see your history
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
