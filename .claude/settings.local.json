@@ -41,7 +41,13 @@
       "Bash(gh run list:*)",
       "WebFetch(domain:monad-synapse-web.vercel.app)",
       "WebFetch(domain:vercel.com)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(npx next dev:*)",
+      "Bash(test-security-fix.bat)",
+      "Bash(./test-security-fix.sh:*)",
+      "Bash(for i in {1..3})",
+      "Bash(do echo \"Test $i:\")",
+      "Bash(done)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
