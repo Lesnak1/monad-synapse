@@ -2,9 +2,9 @@ import Link from 'next/link';
 // Secure versions to avoid transaction failed errors
 import { CoinMasterSecureGame } from '@/components/games/coin-master-secure';
 import { DiceSecureGame } from '@/components/games/dice-secure';
+import { CrashSecureGame } from '@/components/games/crash-secure';
+import { MinesSecureGame } from '@/components/games/mines-secure';
 // Old versions (using useGameContract - may cause transaction failed)
-import { CrashGame } from '@/components/games/crash-game';
-import { MinesGame } from '@/components/games/mines';
 import { PlinkoGame } from '@/components/games/plinko';
 import { WheelGame } from '@/components/games/wheel';
 import { SpinWinGame } from '@/components/games/spin-win';
@@ -28,11 +28,11 @@ export default async function GamePage({ params }: GamePageProps) {
         return <CoinMasterSecureGame />;
       case 'dice':
         return <DiceSecureGame />;
-      // These games still use old versions (may cause transaction failed)
       case 'crash':
-        return <CrashGame />;
+        return <CrashSecureGame />;
       case 'mines':
-        return <MinesGame />;
+        return <MinesSecureGame />;
+      // These games still use old versions (may cause transaction failed)
       case 'plinko':
         return <PlinkoGame />;
       case 'wheel':
