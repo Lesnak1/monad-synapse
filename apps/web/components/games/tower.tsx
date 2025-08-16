@@ -41,7 +41,7 @@ export function TowerGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error('Bet amount must be between 0.001 and ${balance.toFixed(4)} MON');
       return;
     }
@@ -70,15 +70,40 @@ export function TowerGame() {
     if (gamePhase !== 'playing' || levelIndex !== currentLevel) return;
 
     try {
-      // Generate result using casino algorithm
-      // Server-side game logic - use API endpoint instead
+      // Call secure game API endpoint
+      const response = await fetch('/api/game/result', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+        },
+        body: JSON.stringify({
+          gameType: 'tower',
+          gameParams: {
+            betAmount,
+            clientSeed: `tower-${Date.now()}`,
+            nonce: Math.floor(Math.random() * 1000000),
+            level: currentLevel,
+            tileIndex
+          },
+          playerAddress: address,
+          timestamp: Date.now()
+        })
+      });
 
-      const result = { isWin: false, winAmount: 0, gameResult: {} };
+      if (!response.ok) {
+        throw new Error('Game request failed');
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Game failed');
+      }
 
       // Update tower with revealed tiles
       const newTower = [...tower];
       
-      if ((result as any).isSafe) {
+      if (result.gameResult.isSafe) {
         // Safe tile - reveal it and show multiplier
         newTower[levelIndex][tileIndex] = 'safe';
         
@@ -349,10 +374,10 @@ export function TowerGame() {
               
               <button
                 onClick={startGame}
-                disabled={!isConnected || isTransacting || betAmount < 0.001 || betAmount > balance}
+                disabled={!isConnected || isTransacting || betAmount < 0.1 || betAmount > balance}
                 className={`
                   w-full py-3 rounded-xl font-bold transition-all
-                  ${!isConnected || isTransacting || betAmount < 0.001 || betAmount > balance
+                  ${!isConnected || isTransacting || betAmount < 0.1 || betAmount > balance
                     ? 'bg-white/20 text-white/50 cursor-not-allowed'
                     : 'neon-button hover:scale-105'
                   }

@@ -170,7 +170,7 @@ export function SweetBonanzaGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error(`Bet amount must be between 0.001 and ${balance.toFixed(4)} MON`);
       return;
     }
@@ -191,14 +191,42 @@ export function SweetBonanzaGame() {
       // Place bet
       await placeBet(betAmount, 'sweet-bonanza');
 
-      // Generate initial board
-      const initialBoard = fillBoard();
+      // Call secure game API endpoint
+      const response = await fetch('/api/game/result', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+        },
+        body: JSON.stringify({
+          gameType: 'sweet-bonanza',
+          gameParams: {
+            betAmount,
+            clientSeed: `bonanza-${Date.now()}`,
+            nonce: Math.floor(Math.random() * 1000000)
+          },
+          playerAddress: address,
+          timestamp: Date.now()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Game request failed');
+      }
+
+      const gameResult = await response.json();
+      if (!gameResult.success) {
+        throw new Error(gameResult.error || 'Game failed');
+      }
+
+      // Use server-generated board
+      const initialBoard = gameResult.gameResult.grid;
       setGameBoard(initialBoard);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setGamePhase('tumbling');
 
-      // Process cascades
+      // Process cascades with server result
       const result = await processCascade(initialBoard);
       
       setTotalWin(result.totalWin);
@@ -300,9 +328,9 @@ export function SweetBonanzaGame() {
                 type="number"
                 value={betAmount}
                 onChange={(e) => setBetAmount(parseFloat(e.target.value) || 0)}
-                min="0.001"
+                min="0.1"
                 max={balance}
-                step="0.001"
+                step="0.1"
                 disabled={gamePhase !== 'idle' || isTransacting}
                 className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/60 focus:outline-none focus:border-purple-400 disabled:opacity-50"
               />

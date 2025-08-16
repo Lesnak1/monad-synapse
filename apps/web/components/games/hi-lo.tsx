@@ -55,7 +55,7 @@ export function HiLoGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error('Bet amount must be between 0.001 and ${balance.toFixed(4)} MON');
       return;
     }
@@ -318,10 +318,10 @@ export function HiLoGame() {
             <div className="flex items-end">
               <button
                 onClick={startGame}
-                disabled={!isConnected || isTransacting || betAmount < 0.001 || betAmount > balance}
+                disabled={!isConnected || isTransacting || betAmount < 0.1 || betAmount > balance}
                 className={`
                   w-full py-3 rounded-xl font-bold transition-all
-                  ${!isConnected || isTransacting || betAmount < 0.001 || betAmount > balance
+                  ${!isConnected || isTransacting || betAmount < 0.1 || betAmount > balance
                     ? 'bg-white/20 text-white/50 cursor-not-allowed'
                     : 'neon-button hover:scale-105'
                   }

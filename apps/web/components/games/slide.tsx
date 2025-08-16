@@ -91,7 +91,7 @@ export function SlideGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error(`Bet amount must be between 0.001 and ${balance.toFixed(4)} MON`);
       return;
     }
@@ -127,38 +127,74 @@ export function SlideGame() {
     }
   };
 
-  const stopSlider = () => {
+  const stopSlider = async () => {
     if (!isMoving || currentLevel >= levels.length) return;
 
     setIsMoving(false);
     const level = levels[currentLevel];
-    const targetStart = level.targetPosition - level.targetWidth / 2;
-    const targetEnd = level.targetPosition + level.targetWidth / 2;
-    const hit = sliderPosition >= targetStart && sliderPosition <= targetEnd;
+    
+    try {
+      // Call secure game API endpoint
+      const response = await fetch('/api/game/result', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+        },
+        body: JSON.stringify({
+          gameType: 'slide',
+          gameParams: {
+            betAmount,
+            clientSeed: `slide-${Date.now()}`,
+            nonce: Math.floor(Math.random() * 1000000),
+            level: currentLevel,
+            position: sliderPosition
+          },
+          playerAddress: address,
+          timestamp: Date.now()
+        })
+      });
 
-    const newResults = [...levelResults, hit];
-    setLevelResults(newResults);
-
-    if (hit) {
-      const newMultiplier = totalMultiplier * level.multiplier;
-      setTotalMultiplier(newMultiplier);
-      toast.success(`Level ${currentLevel + 1} hit! Multiplier: ${newMultiplier.toFixed(2)}x`);
-      
-      if (currentLevel < levels.length - 1) {
-        // Next level
-        setTimeout(() => {
-          setCurrentLevel(prev => prev + 1);
-          setSliderPosition(50);
-          setDirection(levels[currentLevel + 1]?.direction || 1);
-          setIsMoving(true);
-        }, 1500);
-      } else {
-        // Game complete - all levels passed
-        completeGame(newMultiplier, true);
+      if (!response.ok) {
+        throw new Error('Game request failed');
       }
-    } else {
-      toast.error(`Level ${currentLevel + 1} missed! Game over.`);
-      completeGame(totalMultiplier, false);
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Game failed');
+      }
+
+      const hit = result.gameResult.isWin;
+
+      const newResults = [...levelResults, hit];
+      setLevelResults(newResults);
+
+      if (hit) {
+        const newMultiplier = totalMultiplier * level.multiplier;
+        setTotalMultiplier(newMultiplier);
+        toast.success(`Level ${currentLevel + 1} hit! Multiplier: ${newMultiplier.toFixed(2)}x`);
+        
+        if (currentLevel < levels.length - 1) {
+          // Next level
+          setTimeout(() => {
+            setCurrentLevel(prev => prev + 1);
+            setSliderPosition(50);
+            setDirection(levels[currentLevel + 1]?.direction || 1);
+            setIsMoving(true);
+          }, 1500);
+        } else {
+          // Game complete - all levels passed
+          completeGame(newMultiplier, true);
+        }
+      } else {
+        toast.error(`Level ${currentLevel + 1} missed! Game over.`);
+        completeGame(totalMultiplier, false);
+      }
+    } catch (error) {
+      console.error('Slide game error:', error);
+      toast.error('Game failed. Please try again.');
+      setIsMoving(false);
+      setGamePhase('idle');
     }
   };
 

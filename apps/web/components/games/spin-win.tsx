@@ -104,7 +104,7 @@ export function SpinWinGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error('Bet amount must be between 0.001 and ${balance.toFixed(4)} MON');
       return;
     }
@@ -122,10 +122,34 @@ export function SpinWinGame() {
       // Place bet
       await placeBet(betAmount, 'spin-win');
       
-      // Generate result using casino algorithm
-      // Server-side game logic - use API endpoint instead
+      // Call secure game API endpoint
+      const response = await fetch('/api/game/result', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+        },
+        body: JSON.stringify({
+          gameType: 'slots',
+          gameParams: {
+            betAmount,
+            clientSeed: `spin-${Date.now()}`,
+            nonce: Math.floor(Math.random() * 1000000),
+            lines: selectedLines
+          },
+          playerAddress: address,
+          timestamp: Date.now()
+        })
+      });
 
-      const result = { isWin: false, winAmount: 0, gameResult: {} };
+      if (!response.ok) {
+        throw new Error('Game request failed');
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Game failed');
+      }
       
       // Animate spin
       const spinDuration = 2000;
@@ -136,13 +160,13 @@ export function SpinWinGame() {
       setTimeout(() => {
         clearInterval(spinInterval);
         
-        // Set final result
-        const finalReels = (result as any).reels || [['7', '7', '7'], ['7', '7', '7'], ['7', '7', '7']];
+        // Set final result from server
+        const finalReels = result.gameResult.reels || generateReels();
         setReels(finalReels);
         
-        // Check wins
-        const { winningLines, totalWin } = checkWinningLines(finalReels);
-        setWinLines(winningLines);
+        // Use server-calculated wins
+        const totalWin = result.winAmount || 0;
+        setWinLines(result.gameResult.winningLines || []);
         setWinAmount(totalWin);
 
         if (totalWin > 0) {
@@ -298,7 +322,7 @@ export function SpinWinGame() {
       <div className="flex gap-4">
         <button
           onClick={handleSpin}
-          disabled={!isConnected || spinning || isTransacting || betAmount < 0.001 || betAmount > balance}
+          disabled={!isConnected || spinning || isTransacting || betAmount < 0.1 || betAmount > balance}
           className={`
             flex-1 py-4 rounded-xl font-bold text-lg transition-all
             ${spinning || isTransacting

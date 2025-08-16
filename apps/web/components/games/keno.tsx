@@ -62,7 +62,7 @@ export function KenoGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error('Bet amount must be between 0.001 and ${balance.toFixed(4)} MON');
       return;
     }

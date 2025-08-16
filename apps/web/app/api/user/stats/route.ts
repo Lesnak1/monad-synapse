@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth';
 import { parseEther, formatEther } from 'viem';
 import { z } from 'zod';
+import { getUserGameHistory } from '@/lib/gameStats';
 
 // User statistics interface
 interface UserStats {
@@ -23,9 +24,6 @@ interface UserStats {
   }>;
 }
 
-// Mock database simulation for development
-const mockUserStats: Record<string, UserStats> = {};
-
 // Helper function to format time ago
 function timeAgo(timestamp: number): string {
   const now = Date.now();
@@ -40,59 +38,91 @@ function timeAgo(timestamp: number): string {
   return 'Just now';
 }
 
-// Helper function to generate realistic user stats
-function generateUserStats(address: string): UserStats {
-  // Check if we already have stats for this user
-  if (mockUserStats[address]) {
-    return mockUserStats[address];
+// Function to calculate real user stats from game history
+function calculateUserStats(address: string): UserStats {
+  const userGames = getUserGameHistory(address);
+  
+  if (userGames.length === 0) {
+    // Return empty stats for new users
+    return {
+      totalBalance: '0.000',
+      todayProfit: '0.000',
+      todayProfitChange: '0%',
+      gamesPlayed: 0,
+      gamesPlayedChange: 0,
+      winRate: 0,
+      winRateChange: 0,
+      recentGames: []
+    };
   }
 
-  // Generate realistic but varied stats for each user
-  const seed = address.slice(-4); // Use last 4 chars as seed for consistency
-  const seedNum = parseInt(seed, 16) || 1;
+  // Calculate total profit/loss
+  const totalProfit = userGames.reduce((sum, game) => sum + (game.winAmount - game.betAmount), 0);
   
-  // Generate base values with some randomness but consistency per user
-  const baseBalance = 10 + (seedNum % 50); // 10-60 MON base
-  const todayChange = (seedNum % 30) - 15; // -15 to +15 MON change
-  const gamesCount = 10 + (seedNum % 40); // 10-50 games
-  const winCount = Math.floor(gamesCount * (0.45 + (seedNum % 25) / 100)); // 45-70% win rate
+  // Calculate today's profit (last 24 hours)
+  const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+  const todayGames = userGames.filter(game => game.timestamp > oneDayAgo);
+  const todayProfit = todayGames.reduce((sum, game) => sum + (game.winAmount - game.betAmount), 0);
   
-  const stats: UserStats = {
-    totalBalance: baseBalance.toFixed(3),
-    todayProfit: Math.abs(todayChange).toFixed(3),
-    todayProfitChange: todayChange > 0 ? `+${(todayChange / baseBalance * 100).toFixed(1)}%` : `${(todayChange / baseBalance * 100).toFixed(1)}%`,
-    gamesPlayed: gamesCount,
-    gamesPlayedChange: Math.floor(seedNum % 10),
-    winRate: (winCount / gamesCount * 100),
-    winRateChange: (seedNum % 10) - 5, // -5 to +5% change
-    recentGames: []
+  // Calculate yesterday's profit for comparison
+  const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
+  const yesterdayGames = userGames.filter(game => game.timestamp > twoDaysAgo && game.timestamp <= oneDayAgo);
+  const yesterdayProfit = yesterdayGames.reduce((sum, game) => sum + (game.winAmount - game.betAmount), 0);
+  
+  const profitChange = yesterdayProfit !== 0 ? ((todayProfit - yesterdayProfit) / Math.abs(yesterdayProfit) * 100) : 0;
+  
+  // Calculate win rate
+  const wins = userGames.filter(game => game.isWin).length;
+  const winRate = userGames.length > 0 ? (wins / userGames.length * 100) : 0;
+  
+  // Calculate yesterday's win rate for comparison
+  const yesterdayWins = yesterdayGames.filter(game => game.isWin).length;
+  const yesterdayWinRate = yesterdayGames.length > 0 ? (yesterdayWins / yesterdayGames.length * 100) : 0;
+  const winRateChange = winRate - yesterdayWinRate;
+  
+  // Get recent games (last 10)
+  const recentGames = userGames
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10)
+    .map(game => ({
+      game: formatGameName(game.gameType),
+      bet: `${game.betAmount.toFixed(4)} MON`,
+      result: game.isWin ? 'Win' as const : 'Loss' as const,
+      profit: `${game.isWin ? '+' : ''}${(game.winAmount - game.betAmount).toFixed(4)} MON`,
+      multiplier: game.multiplier > 0 ? `${game.multiplier.toFixed(1)}x` : '0x',
+      timestamp: game.timestamp,
+      timeAgo: timeAgo(game.timestamp)
+    }));
+
+  return {
+    totalBalance: Math.max(0, totalProfit).toFixed(3),
+    todayProfit: Math.abs(todayProfit).toFixed(3),
+    todayProfitChange: profitChange >= 0 ? `+${profitChange.toFixed(1)}%` : `${profitChange.toFixed(1)}%`,
+    gamesPlayed: userGames.length,
+    gamesPlayedChange: todayGames.length,
+    winRate: winRate,
+    winRateChange: winRateChange,
+    recentGames: recentGames
   };
+}
 
-  // Generate recent games with realistic data
-  const gameTypes = ['Coin Master', 'Crash', 'Plinko', 'Mines', 'Dice', 'Sweet Bonanza', 'Burning Wins'];
-  const now = Date.now();
+// Helper to format game names
+function formatGameName(gameType: string): string {
+  const gameNames: Record<string, string> = {
+    'tower': 'Tower',
+    'limbo': 'Limbo',
+    'crash': 'Crash',
+    'sweet-bonanza': 'Sweet Bonanza',
+    'spin-win': 'Spin Win',
+    'slots': 'Slots',
+    'slide': 'Slide',
+    'dice': 'Dice',
+    'mines': 'Mines',
+    'plinko': 'Plinko',
+    'coin-flip': 'Coin Flip'
+  };
   
-  for (let i = 0; i < 5; i++) {
-    const isWin = Math.random() < (stats.winRate / 100);
-    const betAmount = 0.01 + Math.random() * 0.5; // 0.01-0.5 MON
-    const multiplier = isWin ? 1 + Math.random() * 4 : 0; // 0-5x multiplier
-    const profit = isWin ? betAmount * multiplier - betAmount : -betAmount;
-    const timestamp = now - (i * 5 * 60 * 1000) - Math.random() * 300000; // 5min intervals with some randomness
-    
-    stats.recentGames.push({
-      game: gameTypes[Math.floor(Math.random() * gameTypes.length)],
-      bet: betAmount.toFixed(4) + ' MON',
-      result: isWin ? 'Win' : 'Loss',
-      profit: (profit >= 0 ? '+' : '') + profit.toFixed(4) + ' MON',
-      multiplier: multiplier > 0 ? `${multiplier.toFixed(1)}x` : '0x',
-      timestamp,
-      timeAgo: timeAgo(timestamp)
-    });
-  }
-
-  // Cache the generated stats
-  mockUserStats[address] = stats;
-  return stats;
+  return gameNames[gameType] || gameType;
 }
 
 export async function GET(request: NextRequest) {
@@ -119,11 +149,16 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log('✅ Generating stats for user:', userAddress);
+    console.log('✅ Calculating real stats for user:', userAddress);
     
-    // In production, this would query the database for real user statistics
-    // For now, generate realistic stats based on user address
-    const userStats = generateUserStats(userAddress);
+    // Calculate real user statistics from game history
+    const userStats = calculateUserStats(userAddress);
+    
+    console.log('📈 User stats calculated:', {
+      gamesPlayed: userStats.gamesPlayed,
+      winRate: userStats.winRate,
+      totalProfit: userStats.totalBalance
+    });
     
     return NextResponse.json({
       success: true,

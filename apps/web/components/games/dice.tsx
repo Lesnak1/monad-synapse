@@ -291,7 +291,7 @@ export function DiceGame() {
           <label className="block text-white/70 text-sm mb-2">Bet Amount</label>
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => setBet(prev => Math.max(0.001, prev - 0.001))}
+              onClick={() => setBet(prev => Math.max(0.1, prev - 0.1))}
               disabled={isRolling || isTransacting}
               className="casino-card px-3 py-2 text-white hover:bg-white/20 transition-colors"
             >
@@ -300,11 +300,11 @@ export function DiceGame() {
             <input
               type="number"
               value={bet.toFixed(4)}
-              onChange={(e) => setBet(Math.max(0.001, parseFloat(e.target.value) || 0.001))}
+              onChange={(e) => setBet(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
               disabled={isRolling || isTransacting}
               className="flex-1 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white text-center focus:outline-none focus:border-purple-400"
-              step="0.001"
-              min="0.001"
+              step="0.1"
+              min="0.1"
               max={balance}
             />
             <button 

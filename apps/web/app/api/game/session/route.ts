@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const sessionSchema = z.object({
   gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip']),
-  betAmount: z.number().min(0.001).max(1000),
+  betAmount: z.number().min(0.1).max(1000),
   clientSeed: z.string().min(8).max(64).regex(/^[a-zA-Z0-9]+$/),
   nonce: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });

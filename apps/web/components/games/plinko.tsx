@@ -167,11 +167,11 @@ export function PlinkoGame() {
           <input
             type="number"
             value={bet.toFixed(4)}
-            onChange={(e) => setBet(Math.max(0.001, parseFloat(e.target.value) || 0.001))}
+            onChange={(e) => setBet(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
             disabled={isDropping}
             className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white focus:outline-none focus:border-purple-400"
-            step="0.001"
-            min="0.001"
+            step="0.1"
+            min="0.1"
             max={balance}
           />
         </div>

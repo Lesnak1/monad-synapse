@@ -70,8 +70,19 @@ export function useGameContract() {
     const maxPossibleWin = betAmount * 50; // Assume max 50x multiplier possible
     const minReserveBalance = 10;
     
+    // If pool balance is 0 or negative, show appropriate error
+    if (poolBal <= 0) {
+      toast.error('Pool wallet connection failed. Please try again in a moment.');
+      throw new Error('Pool balance unavailable - please contact support');
+    }
+    
     if (poolBal - minReserveBalance < maxPossibleWin) {
-      toast.error(`Pool temporarily low. Max bet: ${((poolBal - minReserveBalance) / 50).toFixed(4)} MON`);
+      const maxBet = Math.max(0, (poolBal - minReserveBalance) / 50);
+      if (maxBet <= 0) {
+        toast.error('Pool temporarily unavailable. Please try again later.');
+      } else {
+        toast.error(`Pool temporarily low. Max bet: ${maxBet.toFixed(4)} MON`);
+      }
       throw new Error('Pool balance insufficient for this bet size');
     }
     

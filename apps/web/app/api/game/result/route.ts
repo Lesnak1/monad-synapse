@@ -6,12 +6,13 @@ import { z } from 'zod';
 import { authenticateRequest, requirePermission } from '@/lib/auth';
 import { cache } from '@/lib/cacheManager';
 import { trackApiCall } from '@/lib/performance';
+import { addGameRecord } from '@/lib/gameStats';
 
 // Input validation schema
 const gameRequestSchema = z.object({
-  gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip', 'roulette', 'blackjack', 'baccarat', 'keno', 'lottery']),
+  gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip', 'roulette', 'blackjack', 'baccarat', 'keno', 'lottery', 'tower', 'spin-win', 'limbo']),
   gameParams: z.object({
-    betAmount: z.number().min(0.001).max(1000),
+    betAmount: z.number().min(0.1).max(1000),
     clientSeed: z.string().min(8).max(64).regex(/^[a-zA-Z0-9]+$/),
     nonce: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     mines: z.number().int().min(1).max(24).optional(),
@@ -300,6 +301,63 @@ export async function POST(request: NextRequest) {
         };
         break;
 
+      case 'tower':
+        // Tower climbing game - determine if tile is safe
+        const towerRoll = gameRandom.dice(gameParams.clientSeed, gameParams.nonce);
+        const difficulty = 'medium'; // Default difficulty
+        const tilesPerLevel = 3; // Medium = 3 tiles
+        const safeChance = (tilesPerLevel - 1) / tilesPerLevel * 100; // 66.67% chance for medium
+        
+        isWin = towerRoll < safeChance;
+        const towerMultiplier = isWin ? 1.5 : 0; // Level multiplier
+        winAmount = isWin ? gameParams.betAmount * towerMultiplier : 0;
+        
+        gameResult = {
+          isSafe: isWin,
+          roll: towerRoll,
+          safeChance,
+          multiplier: towerMultiplier,
+          isWin
+        };
+        break;
+
+      case 'spin-win':
+        // 5-reel slot machine
+        const spinResults = gameRandom.slots(gameParams.clientSeed, gameParams.nonce, 5, 3);
+        // Simple win detection - 3 matching symbols in a line
+        const centerLine = spinResults.map(reel => reel[1]); // Middle line
+        const firstSymbol = centerLine[0];
+        const spinMatches = centerLine.filter(symbol => symbol === firstSymbol).length;
+        
+        isWin = spinMatches >= 3;
+        const spinMultiplier = spinMatches === 5 ? 10 : spinMatches === 4 ? 5 : spinMatches === 3 ? 2 : 0;
+        winAmount = isWin ? gameParams.betAmount * spinMultiplier : 0;
+        
+        gameResult = {
+          reels: spinResults,
+          centerLine,
+          matches: spinMatches,
+          multiplier: spinMultiplier,
+          winningLines: isWin ? [1] : [], // Middle line = index 1
+          isWin
+        };
+        break;
+
+      case 'limbo':
+        // Same as crash for backend logic
+        const limboPoint = gameRandom.crash(gameParams.clientSeed, gameParams.nonce);
+        const targetMultiplier = gameParams.multiplier || 2.0;
+        
+        isWin = limboPoint >= targetMultiplier;
+        winAmount = isWin ? gameParams.betAmount * targetMultiplier : 0;
+        
+        gameResult = {
+          crashPoint: limboPoint,
+          targetMultiplier,
+          isWin
+        };
+        break;
+
       default:
         return NextResponse.json({ success: false, error: 'Unknown game type' }, { status: 400 });
     }
@@ -315,6 +373,25 @@ export async function POST(request: NextRequest) {
         .update(`${serverSeedHash}:${gameParams.clientSeed}:${gameParams.nonce}:${gameType}`)
         .digest('hex')
     };
+
+    // Record the game in user statistics
+    const multiplier = gameResult.multiplier || (isWin ? winAmount / gameParams.betAmount : 0);
+    addGameRecord(
+      playerAddress,
+      gameType,
+      gameParams.betAmount,
+      winAmount,
+      isWin,
+      multiplier
+    );
+
+    console.log('🎮 Game recorded:', {
+      player: playerAddress,
+      game: gameType,
+      bet: gameParams.betAmount,
+      win: winAmount,
+      result: isWin ? 'WIN' : 'LOSS'
+    });
 
     return NextResponse.json({
       success: true,

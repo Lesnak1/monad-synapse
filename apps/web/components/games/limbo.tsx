@@ -23,7 +23,7 @@ export function LimboGame() {
       return;
     }
 
-    if (betAmount < 0.001 || betAmount > balance) {
+    if (betAmount < 0.1 || betAmount > balance) {
       toast.error('Bet amount must be between 0.001 and ${balance.toFixed(4)} MON');
       return;
     }
@@ -46,22 +46,47 @@ export function LimboGame() {
       // Place bet
       await placeBet(betAmount, 'limbo');
       
-      // Generate crash point using casino algorithm
-      // Server-side game logic - use API endpoint instead
+      // Call secure game API endpoint
+      const response = await fetch('/api/game/result', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+        },
+        body: JSON.stringify({
+          gameType: 'crash',
+          gameParams: {
+            betAmount,
+            clientSeed: `limbo-${Date.now()}`,
+            nonce: Math.floor(Math.random() * 1000000),
+            multiplier: targetMultiplier
+          },
+          playerAddress: address,
+          timestamp: Date.now()
+        })
+      });
 
-      const result = { isWin: false, winAmount: 0, gameResult: {} };
-      setCrashPoint((result as any).crashPoint || 1.0);
+      if (!response.ok) {
+        throw new Error('Game request failed');
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Game failed');
+      }
+
+      setCrashPoint(result.gameResult.crashPoint);
       
       // Animate flight
       const startTime = Date.now();
-      const flightDuration = Math.min(((result as any).crashPoint || 1.0) * 1000, 10000); // Max 10 seconds
+      const flightDuration = Math.min(result.gameResult.crashPoint * 1000, 10000); // Max 10 seconds
       
       const animateMultiplier = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / flightDuration, 1);
         
         // Exponential growth curve
-        const currentMult = 1 + (((result as any).crashPoint || 1.0) - 1) * progress;
+        const currentMult = 1 + (result.gameResult.crashPoint - 1) * progress;
         setCurrentMultiplier(currentMult);
 
         if (progress < 1 && isFlying) {
@@ -70,20 +95,20 @@ export function LimboGame() {
           // Flight ended
           setIsFlying(false);
           
-          if (((result as any).crashPoint || 1.0) >= targetMultiplier) {
+          if (result.gameResult.crashPoint >= targetMultiplier) {
             // Won!
             setGamePhase('won');
             const winAmount = betAmount * targetMultiplier;
             payoutWin(winAmount, 'limbo');
-            toast.success(`🚀 Rocket flew to ${(((result as any).crashPoint || 1.0).toFixed(2))}x! You won ${winAmount.toFixed(4)} MON!`);
+            toast.success(`🚀 Rocket flew to ${result.gameResult.crashPoint.toFixed(2)}x! You won ${winAmount.toFixed(4)} MON!`);
           } else {
             // Crashed before target
             setGamePhase('crashed');
-            toast.error(`💥 Rocket crashed at ${(((result as any).crashPoint || 1.0).toFixed(2))}x!`);
+            toast.error(`💥 Rocket crashed at ${result.gameResult.crashPoint.toFixed(2)}x!`);
           }
 
           // Add to history
-          setGameHistory(prev => [((result as any).crashPoint || 1.0), ...prev.slice(0, 9)]);
+          setGameHistory(prev => [result.gameResult.crashPoint, ...prev.slice(0, 9)]);
           
           // Reset after 3 seconds
           setTimeout(() => {
@@ -313,7 +338,7 @@ export function LimboGame() {
       {/* Action Button */}
       <button
         onClick={startFlight}
-        disabled={!isConnected || gamePhase !== 'betting' || isTransacting || betAmount < 0.001 || betAmount > balance}
+        disabled={!isConnected || gamePhase !== 'betting' || isTransacting || betAmount < 0.1 || betAmount > balance}
         className={`
           w-full py-4 rounded-xl font-bold text-lg transition-all
           ${gamePhase !== 'betting' || isTransacting

@@ -132,8 +132,17 @@ class EnhancedPoolManager extends EventEmitter {
   async getPoolBalance(): Promise<number> {
     try {
       console.log('🔍 Getting pool balance...');
-      console.log('Pool address:', PUBLIC_POOL_ADDRESS);
+      console.log('Pool address from env:', process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS);
+      console.log('Pool address processed:', PUBLIC_POOL_ADDRESS);
       console.log('Environment:', process.env.NODE_ENV);
+      console.log('Is client-side:', typeof window !== 'undefined');
+      
+      // Validate environment variable is loaded
+      if (!process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS) {
+        console.error('❌ NEXT_PUBLIC_POOL_WALLET_ADDRESS environment variable not found');
+        console.log('Available env vars starting with NEXT_PUBLIC_:', 
+          Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')));
+      }
       
       // Always try to get actual blockchain balance first  
       if (PUBLIC_POOL_ADDRESS && PUBLIC_POOL_ADDRESS.length > 0 && PUBLIC_POOL_ADDRESS !== '0x0000000000000000000000000000000000000000') {
@@ -187,19 +196,29 @@ class EnhancedPoolManager extends EventEmitter {
         throw new Error('All RPC endpoints failed');
       } else {
         console.log('⚠️ No valid pool address configured');
-        throw new Error('Pool wallet address not configured - set NEXT_PUBLIC_POOL_WALLET_ADDRESS environment variable');
+        console.log('Environment variable content:', process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS);
+        console.log('Expected format: 0x followed by 40 hex characters');
+        throw new Error('Pool wallet address not configured or invalid - check NEXT_PUBLIC_POOL_WALLET_ADDRESS environment variable');
       }
     } catch (error) {
       console.error('❌ Error getting pool balance:', error);
+      console.error('Full error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        poolAddress: PUBLIC_POOL_ADDRESS,
+        envVar: process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS,
+        isClientSide: typeof window !== 'undefined'
+      });
+      
       this.emit('security:alert', 'critical', `Failed to retrieve pool balance: ${(error as Error).message}`);
       
-      // Only use fallback in development, not production
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ Using fallback balance in DEVELOPMENT only');
+      // NEVER use fallback in production or when environment is misconfigured
+      if (process.env.NODE_ENV === 'development' && PUBLIC_POOL_ADDRESS === FALLBACK_POOL_ADDRESS) {
+        console.warn('⚠️ Using fallback balance in DEVELOPMENT only (no real address configured)');
         return this.fallbackPoolBalance;
       } else {
-        // In production, return 0 to indicate error rather than mock data
-        console.error('🚨 PRODUCTION: Cannot fetch real pool balance - returning 0');
+        // Return 0 to indicate error - never return mock data when real address should work
+        console.error('🚨 Cannot fetch real pool balance - returning 0 to prevent using mock data');
         return 0;
       }
     }

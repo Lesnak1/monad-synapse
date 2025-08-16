@@ -198,8 +198,8 @@ export function BurningWinsGame() {
               <label className="block text-orange-200 text-sm mb-2">Bet Amount (MON)</label>
               <input
                 type="number"
-                step="0.001"
-                min="0.001"
+                step="0.1"
+                min="0.1"
                 max="100"
                 value={betAmount}
                 onChange={(e) => setBetAmount(parseFloat(e.target.value) || 0)}
