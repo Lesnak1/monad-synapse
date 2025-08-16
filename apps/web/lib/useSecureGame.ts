@@ -123,11 +123,29 @@ export function useSecureGame() {
       });
 
       console.log('📨 Game response status:', response.status, response.statusText);
+      console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Game request failed:', errorData);
-        throw new Error(errorData.error?.message || errorData.message || 'Game request failed');
+        console.error('❌ Game request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          url: response.url
+        });
+        
+        // Log specific error details for debugging
+        if (response.status === 401) {
+          console.error('🔒 Authentication error - token may be expired or invalid');
+          console.error('🔑 Current auth token:', getAuthToken()?.substring(0, 20) + '...');
+        } else if (response.status === 400) {
+          console.error('📝 Validation error - check game parameters');
+          console.error('🎮 Game params sent:', fullGameParams);
+        } else if (response.status === 500) {
+          console.error('💥 Server error - check API endpoint');
+        }
+        
+        throw new Error(errorData.error?.message || errorData.message || `Game request failed with status ${response.status}`);
       }
 
       const gameResult: GameResult = await response.json();
@@ -166,6 +184,8 @@ export function useSecureGame() {
 
       const transactionId = `${gameType}-payout-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+      console.log('💳 Initiating payout:', { playerAddress, winAmount, gameType, transactionId });
+      
       const response = await fetch('/api/payout', {
         method: 'POST',
         headers: {
@@ -180,9 +200,29 @@ export function useSecureGame() {
         })
       });
 
+      console.log('💳 Payout response status:', response.status, response.statusText);
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Payout failed');
+        console.error('❌ Payout failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          url: response.url
+        });
+        
+        // Log specific payout errors
+        if (response.status === 401) {
+          console.error('🔒 Payout authentication error');
+        } else if (response.status === 503) {
+          console.error('🚨 Service unavailable - security audit blocking');
+        } else if (response.status === 400) {
+          console.error('📝 Payout validation error');
+        } else if (response.status === 423) {
+          console.error('🔒 Another payout in progress');
+        }
+        
+        throw new Error(errorData.error?.message || `Payout failed with status ${response.status}`);
       }
 
       const payoutResult: PayoutResult = await response.json();
@@ -223,11 +263,14 @@ export function useSecureGame() {
     gameParams: Omit<GameParams, 'clientSeed' | 'nonce'>,
     onGameResult?: (result: GameResult) => void
   ): Promise<{ gameResult: GameResult; payoutResult?: PayoutResult }> => {
+    console.log('🎮 Starting playGameWithPayout:', { gameType, playerAddress, gameParams });
     
     const gameResult = await playGame(gameType, playerAddress, gameParams);
+    console.log('🎲 Game result received:', gameResult);
     
     // Call optional callback for UI updates
     if (onGameResult) {
+      console.log('📞 Calling onGameResult callback');
       onGameResult(gameResult);
     }
 
@@ -235,13 +278,18 @@ export function useSecureGame() {
 
     // Process payout if game was won
     if (gameResult.success && gameResult.result?.isWin && gameResult.result.winAmount > 0) {
+      console.log('💰 Processing payout for win amount:', gameResult.result.winAmount);
       payoutResult = await processPayout(
         playerAddress, 
         gameResult.result.winAmount, 
         gameType
       );
+      console.log('💳 Payout result:', payoutResult);
+    } else {
+      console.log('❌ No payout needed - not a win or no win amount');
     }
 
+    console.log('✅ playGameWithPayout completed:', { gameResult, payoutResult });
     return { gameResult, payoutResult };
   }, [playGame, processPayout]);
 

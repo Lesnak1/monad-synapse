@@ -222,8 +222,8 @@ export async function POST(request: NextRequest) {
         break;
 
       case 'coin-master':
-        // Coin Master style slot machine with multiple symbols
-        const coinMasterSymbols = ['🍒', '🍋', '🍊', '🍇', '⭐', '💎', '🎰', '🔔'];
+        // Coin Master style slot machine with frontend-matching symbols
+        const coinMasterSymbols = ['🪙', '💎', '⚡', '🍀', '🔥', '💰', '⭐'];
         const coinMasterReels = [];
         
         // Generate 3 reels with random symbols
@@ -233,18 +233,24 @@ export async function POST(request: NextRequest) {
           coinMasterReels.push(coinMasterSymbols[symbolIndex]);
         }
         
-        // Check for wins
-        const uniqueSymbols = new Set(coinMasterReels).size;
+        // Check for wins with proper logic
+        const symbolCounts = {};
+        coinMasterReels.forEach(symbol => {
+          symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
+        });
+        
+        const maxCount = Math.max(...Object.values(symbolCounts));
         let coinMasterMultiplier = 0;
         
-        if (uniqueSymbols === 1) {
+        if (maxCount === 3) {
           // All 3 same symbols
           const symbol = coinMasterReels[0];
           if (symbol === '💎') coinMasterMultiplier = 10;
           else if (symbol === '⭐') coinMasterMultiplier = 5;
-          else if (symbol === '🎰') coinMasterMultiplier = 3;
+          else if (symbol === '🔥') coinMasterMultiplier = 3;
+          else if (symbol === '💰') coinMasterMultiplier = 2.5;
           else coinMasterMultiplier = 2;
-        } else if (uniqueSymbols === 2) {
+        } else if (maxCount === 2) {
           // 2 matching symbols
           coinMasterMultiplier = 1.5;
         }
@@ -256,7 +262,9 @@ export async function POST(request: NextRequest) {
           spinResult: coinMasterReels,
           symbols: coinMasterReels,
           multiplier: coinMasterMultiplier,
-          isWin
+          isWin,
+          symbolCounts,
+          maxMatches: maxCount
         };
         break;
 

@@ -86,17 +86,23 @@ export function CoinMasterSecureGame() {
   const getMultiplier = () => {
     if (!result || result.length === 0) return '0x';
     
-    // Count unique symbols
-    const uniqueSymbols = new Set(result).size;
+    // Count symbol occurrences
+    const symbolCounts = {};
+    result.forEach(symbol => {
+      symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
+    });
     
-    if (uniqueSymbols === 1) {
+    const maxCount = Math.max(...Object.values(symbolCounts));
+    
+    if (maxCount === 3) {
       // All 3 same symbols
       const symbol = result[0];
       if (symbol === '💎') return '10x';
       if (symbol === '⭐') return '5x';
-      if (symbol === '🎰') return '3x';
+      if (symbol === '🔥') return '3x';
+      if (symbol === '💰') return '2.5x';
       return '2x';
-    } else if (uniqueSymbols === 2) {
+    } else if (maxCount === 2) {
       // 2 matching symbols
       return '1.5x';
     }
@@ -177,8 +183,9 @@ export function CoinMasterSecureGame() {
         <div className="font-semibold mb-2">How to Win:</div>
         <div>• 3 💎 symbols = 10x multiplier</div>
         <div>• 3 ⭐ symbols = 5x multiplier</div>
-        <div>• 3 🎰 symbols = 3x multiplier</div>
-        <div>• 3 matching symbols = 2x multiplier</div>
+        <div>• 3 🔥 symbols = 3x multiplier</div>
+        <div>• 3 💰 symbols = 2.5x multiplier</div>
+        <div>• 3 other matching = 2x multiplier</div>
         <div>• 2 matching symbols = 1.5x multiplier</div>
       </div>
 
