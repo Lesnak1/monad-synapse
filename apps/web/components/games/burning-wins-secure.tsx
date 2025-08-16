@@ -29,8 +29,11 @@ export function BurningWinsGame() {
       setIsGameLoading(true);
       setGamePhase('spinning');
       
-      // Generate client seed for provably fair gaming
-      const clientSeed = `burning-wins-${address}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Generate client seed for provably fair gaming (alphanumeric only)
+      const timestamp = Date.now().toString();
+      const random = Math.random().toString(36).substr(2, 9);
+      const addressSuffix = address?.slice(2, 8) || 'unknown'; // Use part of address (without 0x)
+      const clientSeed = `burningwins${addressSuffix}${timestamp}${random}`;
       
       // Call secure game API
       const response = await fetch('/api/game/result', {

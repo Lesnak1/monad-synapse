@@ -38,7 +38,8 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(mv:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "WebFetch(domain:monad-synapse-web.vercel.app)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

@@ -57,7 +57,7 @@ export function LimboGame() {
           gameType: 'crash',
           gameParams: {
             betAmount,
-            clientSeed: `limbo-${Date.now()}`,
+            clientSeed: `limbo${Date.now()}${Math.random().toString(36).substr(2, 6)}`,
             nonce: Math.floor(Math.random() * 1000000),
             multiplier: targetMultiplier
           },

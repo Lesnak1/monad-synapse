@@ -68,7 +68,12 @@ export function useSecureGame() {
   }, []);
 
   const generateClientSeed = useCallback((gameType: string, playerAddress: string) => {
-    return `${gameType}-${playerAddress}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Generate alphanumeric only client seed to pass server validation
+    const timestamp = Date.now().toString();
+    const random = Math.random().toString(36).substr(2, 9);
+    const gamePrefix = gameType.replace(/[^a-zA-Z0-9]/g, ''); // Remove non-alphanumeric
+    const addressSuffix = playerAddress?.slice(2, 8) || 'unknown'; // Use part of address (without 0x)
+    return `${gamePrefix}${addressSuffix}${timestamp}${random}`;
   }, []);
 
   const playGame = useCallback(async (

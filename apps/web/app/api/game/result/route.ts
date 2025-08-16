@@ -64,10 +64,20 @@ export async function POST(request: NextRequest) {
       }
 
     const body = await request.json();
+    console.log('📨 Game request body received:', {
+      gameType: body.gameType,
+      betAmount: body.gameParams?.betAmount,
+      playerAddress: body.playerAddress,
+      hasClientSeed: !!body.gameParams?.clientSeed,
+      hasNonce: body.gameParams?.nonce !== undefined,
+      clientSeedLength: body.gameParams?.clientSeed?.length,
+      clientSeedFormat: body.gameParams?.clientSeed?.match(/^[a-zA-Z0-9]+$/) ? 'valid' : 'invalid'
+    });
     
     // Comprehensive input validation
     const validationResult = gameRequestSchema.safeParse(body);
     if (!validationResult.success) {
+      console.error('❌ Game request validation failed:', validationResult.error.issues);
       return NextResponse.json({ 
         success: false, 
         error: 'Invalid request parameters',
@@ -75,22 +85,40 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    console.log('✅ Game request validation passed');
+
     const { gameType, gameParams, playerAddress } = validationResult.data;
 
     // Validate client seed and nonce
+    console.log('🔍 Validating client seed:', {
+      seed: gameParams.clientSeed,
+      length: gameParams.clientSeed.length,
+      format: /^[a-zA-Z0-9]+$/.test(gameParams.clientSeed)
+    });
+    
     if (!randomValidation.validateClientSeed(gameParams.clientSeed)) {
+      console.error('❌ Invalid client seed format');
       return NextResponse.json({ 
         success: false, 
         error: 'Invalid client seed format' 
       }, { status: 400 });
     }
 
+    console.log('🔍 Validating nonce:', {
+      nonce: gameParams.nonce,
+      isInteger: Number.isInteger(gameParams.nonce),
+      isInRange: gameParams.nonce >= 0 && gameParams.nonce < Number.MAX_SAFE_INTEGER
+    });
+
     if (!randomValidation.validateNonce(gameParams.nonce)) {
+      console.error('❌ Invalid nonce value');
       return NextResponse.json({ 
         success: false, 
         error: 'Invalid nonce value' 
       }, { status: 400 });
     }
+
+    console.log('✅ Client seed and nonce validation passed');
 
     // Get server seed hash for client verification (cached for performance)
     const serverSeedHash = await cache.getOrSet(

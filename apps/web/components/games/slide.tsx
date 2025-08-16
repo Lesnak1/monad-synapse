@@ -145,7 +145,7 @@ export function SlideGame() {
           gameType: 'slide',
           gameParams: {
             betAmount,
-            clientSeed: `slide-${Date.now()}`,
+            clientSeed: `slide${Date.now()}`,
             nonce: Math.floor(Math.random() * 1000000),
             level: currentLevel,
             position: sliderPosition

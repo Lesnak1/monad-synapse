@@ -48,7 +48,11 @@ export function CoinMasterGame() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Call secure game API for fair results
-      const clientSeed = `coin-master-${address}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Generate alphanumeric client seed
+      const timestamp = Date.now().toString();
+      const random = Math.random().toString(36).substr(2, 9);
+      const addressSuffix = address?.slice(2, 8) || 'unknown';
+      const clientSeed = `coinmaster${addressSuffix}${timestamp}${random}`;
       
       const response = await fetch('/api/game/result', {
         method: 'POST',

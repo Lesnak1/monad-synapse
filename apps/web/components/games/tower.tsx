@@ -81,7 +81,7 @@ export function TowerGame() {
           gameType: 'tower',
           gameParams: {
             betAmount,
-            clientSeed: `tower-${Date.now()}`,
+            clientSeed: `tower${Date.now()}`,
             nonce: Math.floor(Math.random() * 1000000),
             level: currentLevel,
             tileIndex

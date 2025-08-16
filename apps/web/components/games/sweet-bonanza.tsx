@@ -202,7 +202,7 @@ export function SweetBonanzaGame() {
           gameType: 'sweet-bonanza',
           gameParams: {
             betAmount,
-            clientSeed: `bonanza-${Date.now()}`,
+            clientSeed: `bonanza${Date.now()}`,
             nonce: Math.floor(Math.random() * 1000000)
           },
           playerAddress: address,

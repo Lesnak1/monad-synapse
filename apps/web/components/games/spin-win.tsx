@@ -133,7 +133,7 @@ export function SpinWinGame() {
           gameType: 'slots',
           gameParams: {
             betAmount,
-            clientSeed: `spin-${Date.now()}`,
+            clientSeed: `spin${Date.now()}`,
             nonce: Math.floor(Math.random() * 1000000),
             lines: selectedLines
           },
