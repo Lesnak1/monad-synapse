@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useSecureGame } from '@/lib/useSecureGame';
+import { useWalletAuth } from '@/lib/useWalletAuth';
 import { BET_LIMITS } from '@/lib/poolWallet';
 import { toast } from 'react-hot-toast';
 
@@ -13,17 +14,34 @@ export function CoinMasterSecureGame() {
   const [lastWin, setLastWin] = useState<number | null>(null);
   
   const { address, isConnected } = useAccount();
+  const { isAuthenticated, isAuthenticating, authenticate } = useWalletAuth();
   const { playGameWithPayout, isLoading } = useSecureGame();
 
   const symbols = ['🪙', '💎', '⚡', '🍀', '🔥', '💰', '⭐'];
   
   const spin = async () => {
+    console.log('🎰 Coin Master spin started');
+    console.log('Wallet connected:', isConnected);
+    console.log('Address:', address);
+    console.log('Authenticated:', isAuthenticated);
+    
     if (!isConnected || !address) {
+      console.log('❌ Wallet not connected');
       toast.error('Please connect your wallet first!');
       return;
     }
+    
+    if (!isAuthenticated) {
+      console.log('❌ Not authenticated, starting authentication...');
+      const authSuccess = await authenticate();
+      if (!authSuccess) {
+        console.log('❌ Authentication failed');
+        return;
+      }
+    }
 
     try {
+      console.log('🎮 Starting coin master game with bet:', bet);
       setIsSpinning(true);
       setResult([]);
       
@@ -50,13 +68,17 @@ export function CoinMasterSecureGame() {
       );
 
       if (!gameResult.success) {
+        console.log('❌ Game failed:', gameResult.error);
         toast.error(gameResult.error?.message || 'Game failed');
+      } else {
+        console.log('✅ Game success:', gameResult);
       }
 
     } catch (error) {
-      console.error('Game error:', error);
+      console.error('❌ Coin Master game error:', error);
       toast.error('Game failed. Please try again.');
     } finally {
+      console.log('🏁 Coin Master game ended');
       setIsSpinning(false);
     }
   };
@@ -126,22 +148,26 @@ export function CoinMasterSecureGame() {
           step="0.1"
           min={BET_LIMITS.min}
           max={BET_LIMITS.max}
-          disabled={isSpinning || isLoading}
+          disabled={isSpinning || isLoading || isAuthenticating}
         />
       </div>
 
       {/* Spin Button */}
       <button
         onClick={spin}
-        disabled={!isConnected || isSpinning || isLoading}
+        disabled={!isConnected || isSpinning || isLoading || isAuthenticating}
         className={`w-full neon-button py-4 text-lg font-bold ${
-          (!isConnected || isSpinning || isLoading) ? 'opacity-50 cursor-not-allowed' : ''
+          (!isConnected || isSpinning || isLoading || isAuthenticating) ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
         {!isConnected
           ? 'CONNECT WALLET'
+          : isAuthenticating
+          ? 'AUTHENTICATING...'
           : isSpinning || isLoading
           ? 'SPINNING...'
+          : !isAuthenticated
+          ? 'SIGN TO PLAY'
           : 'SPIN'
         }
       </button>

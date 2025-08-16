@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useSecureGame } from '@/lib/useSecureGame';
+import { useWalletAuth } from '@/lib/useWalletAuth';
 import { BET_LIMITS } from '@/lib/poolWallet';
 import { toast } from 'react-hot-toast';
 
@@ -19,12 +20,18 @@ export function MinesSecureGame() {
   const [lastWin, setLastWin] = useState<number | null>(null);
   
   const { address, isConnected } = useAccount();
+  const { isAuthenticated, isAuthenticating, authenticate } = useWalletAuth();
   const { playGameWithPayout, isLoading } = useSecureGame();
 
   const playMines = async () => {
     if (!isConnected || !address) {
       toast.error('Please connect your wallet first!');
       return;
+    }
+    
+    if (!isAuthenticated) {
+      const authSuccess = await authenticate();
+      if (!authSuccess) return;
     }
 
     if (mineCount < 1 || mineCount > 24) {
@@ -144,7 +151,7 @@ export function MinesSecureGame() {
                 min={BET_LIMITS.min}
                 max={BET_LIMITS.max}
                 step="0.1"
-                disabled={isLoading || isPlaying}
+                disabled={isLoading || isPlaying || isAuthenticating}
               />
             </div>
 
@@ -157,7 +164,7 @@ export function MinesSecureGame() {
                 className="w-full px-4 py-2 bg-black/20 border border-purple-500/30 rounded-lg text-white"
                 min="1"
                 max="24"
-                disabled={isLoading || isPlaying}
+                disabled={isLoading || isPlaying || isAuthenticating}
               />
               <div className="text-sm text-white/60 mt-1">
                 More mines = higher multiplier, but higher risk
@@ -166,10 +173,18 @@ export function MinesSecureGame() {
 
             <button
               onClick={playMines}
-              disabled={isLoading || isPlaying || !isConnected}
-              className="w-full btn-primary py-3 text-lg disabled:opacity-50"
+              disabled={isLoading || isPlaying || !isConnected || isAuthenticating}
+              className="w-full neon-button py-4 text-lg font-bold disabled:opacity-50"
             >
-              {isLoading || isPlaying ? 'Playing...' : `Bet ${bet} MON`}
+              {!isConnected
+                ? 'CONNECT WALLET'
+                : isAuthenticating
+                ? 'AUTHENTICATING...'
+                : isLoading || isPlaying
+                ? 'PLAYING...'
+                : !isAuthenticated
+                ? 'SIGN TO PLAY'
+                : `BET ${bet} MON`}
             </button>
           </div>
 

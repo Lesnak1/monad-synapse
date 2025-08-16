@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useSecureGame } from '@/lib/useSecureGame';
+import { useWalletAuth } from '@/lib/useWalletAuth';
 import { BET_LIMITS } from '@/lib/poolWallet';
 import { toast } from 'react-hot-toast';
 
@@ -15,12 +16,18 @@ export function CrashSecureGame() {
   const [gameHistory, setGameHistory] = useState<Array<{crash: number, win: boolean, multiplier: number}>>([]);
   
   const { address, isConnected } = useAccount();
+  const { isAuthenticated, isAuthenticating, authenticate } = useWalletAuth();
   const { playGameWithPayout, isLoading } = useSecureGame();
 
   const playCrash = async () => {
     if (!isConnected || !address) {
       toast.error('Please connect your wallet first!');
       return;
+    }
+    
+    if (!isAuthenticated) {
+      const authSuccess = await authenticate();
+      if (!authSuccess) return;
     }
 
     if (targetMultiplier < 1.01 || targetMultiplier > 100) {
@@ -114,7 +121,7 @@ export function CrashSecureGame() {
                 min={BET_LIMITS.min}
                 max={BET_LIMITS.max}
                 step="0.1"
-                disabled={isLoading || isPlaying}
+                disabled={isLoading || isPlaying || isAuthenticating}
               />
             </div>
 
@@ -128,7 +135,7 @@ export function CrashSecureGame() {
                 min="1.01"
                 max="100"
                 step="0.01"
-                disabled={isLoading || isPlaying}
+                disabled={isLoading || isPlaying || isAuthenticating}
               />
               <div className="text-sm text-white/60 mt-1">
                 Potential win: {(bet * targetMultiplier).toFixed(4)} MON
@@ -137,10 +144,18 @@ export function CrashSecureGame() {
 
             <button
               onClick={playCrash}
-              disabled={isLoading || isPlaying || !isConnected}
-              className="w-full btn-primary py-3 text-lg disabled:opacity-50"
+              disabled={isLoading || isPlaying || !isConnected || isAuthenticating}
+              className="w-full neon-button py-4 text-lg font-bold disabled:opacity-50"
             >
-              {isLoading || isPlaying ? 'Playing...' : `Bet ${bet} MON`}
+              {!isConnected
+                ? 'CONNECT WALLET'
+                : isAuthenticating
+                ? 'AUTHENTICATING...'
+                : isLoading || isPlaying
+                ? 'PLAYING...'
+                : !isAuthenticated
+                ? 'SIGN TO PLAY'
+                : `BET ${bet} MON`}
             </button>
           </div>
 

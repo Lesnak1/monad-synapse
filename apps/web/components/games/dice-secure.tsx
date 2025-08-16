@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useSecureGame } from '@/lib/useSecureGame';
+import { useWalletAuth } from '@/lib/useWalletAuth';
 import { BET_LIMITS } from '@/lib/poolWallet';
 import { toast } from 'react-hot-toast';
 
@@ -16,6 +17,7 @@ export function DiceSecureGame() {
   const [gameHistory, setGameHistory] = useState<Array<{roll: number, win: boolean, multiplier: number}>>([]);
   
   const { address, isConnected } = useAccount();
+  const { isAuthenticated, isAuthenticating, authenticate } = useWalletAuth();
   const { playGameWithPayout, isLoading } = useSecureGame();
 
   const calculateMultiplier = () => {
@@ -31,6 +33,11 @@ export function DiceSecureGame() {
     if (!isConnected || !address) {
       toast.error('Please connect your wallet first!');
       return;
+    }
+    
+    if (!isAuthenticated) {
+      const authSuccess = await authenticate();
+      if (!authSuccess) return;
     }
 
     try {
@@ -188,15 +195,19 @@ export function DiceSecureGame() {
       {/* Roll Button */}
       <button
         onClick={rollDice}
-        disabled={!isConnected || isRolling || isLoading}
+        disabled={!isConnected || isRolling || isLoading || isAuthenticating}
         className={`w-full neon-button py-4 text-lg font-bold ${
-          (!isConnected || isRolling || isLoading) ? 'opacity-50 cursor-not-allowed' : ''
+          (!isConnected || isRolling || isLoading || isAuthenticating) ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
         {!isConnected
           ? 'CONNECT WALLET'
+          : isAuthenticating
+          ? 'AUTHENTICATING...'
           : isRolling || isLoading
           ? 'ROLLING...'
+          : !isAuthenticated
+          ? 'SIGN TO PLAY'
           : 'ROLL DICE'
         }
       </button>
