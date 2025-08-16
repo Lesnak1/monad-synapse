@@ -34,7 +34,12 @@ export async function POST(request: NextRequest) {
       // Production authentication required
       const authResult = await authenticateRequest(request);
       if (!authResult.isAuthenticated) {
-        console.log('❌ Authentication failed:', authResult.error);
+        console.log('❌ Authentication failed in game result API:', authResult.error);
+        console.log('Headers received:', {
+          authorization: request.headers.get('Authorization')?.substring(0, 20) + '...',
+          contentType: request.headers.get('Content-Type'),
+          userAgent: request.headers.get('User-Agent')?.substring(0, 50) + '...'
+        });
         return NextResponse.json({
           success: false,
           error: 'Authentication required - Please connect wallet and sign message',
@@ -43,7 +48,10 @@ export async function POST(request: NextRequest) {
         }, { status: 401 });
       }
 
-      console.log('✅ User authenticated:', authResult.user);
+      console.log('✅ User authenticated in game result API:', {
+        address: 'address' in authResult.user! ? authResult.user.address : 'N/A',
+        permissions: authResult.user!.permissions
+      });
 
       // Check permissions
       if (!requirePermission('game:result')(authResult.user!)) {

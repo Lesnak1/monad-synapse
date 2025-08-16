@@ -224,15 +224,41 @@ export class AuthenticationService {
    */
   async validateToken(token: string): Promise<UserSession | null> {
     try {
+      console.log('🔍 Validating token...');
       const decoded = await verifyJWT(token, JWT_SECRET);
-      const session = this.sessions.get(decoded.sessionId);
+      console.log('🔍 Token decoded:', { sessionId: decoded.sessionId, address: decoded.address });
       
-      if (!session || session.expiresAt < Date.now()) {
+      const session = this.sessions.get(decoded.sessionId);
+      console.log('🔍 Session found:', !!session);
+      
+      if (!session) {
+        // If session not found in memory, recreate from token (for production deployment)
+        console.log('🔄 Session not found in memory, recreating from token...');
+        const recreatedSession: UserSession = {
+          id: decoded.sessionId,
+          address: decoded.address,
+          nonce: Date.now(),
+          issuedAt: Date.now(),
+          expiresAt: decoded.exp * 1000,
+          permissions: decoded.permissions || ['game:play', 'game:result', 'payout:request'],
+          sessionId: decoded.sessionId
+        };
+        
+        // Store recreated session
+        this.sessions.set(decoded.sessionId, recreatedSession);
+        console.log('✅ Session recreated for address:', decoded.address);
+        return recreatedSession;
+      }
+      
+      if (session.expiresAt < Date.now()) {
+        console.log('❌ Session expired');
         return null;
       }
 
+      console.log('✅ Session valid for address:', session.address);
       return session;
     } catch (error) {
+      console.error('❌ Token validation error:', error);
       return null;
     }
   }
@@ -372,18 +398,24 @@ export async function authenticateRequest(request: NextRequest): Promise<{
 
     const auth = AuthenticationService.getInstance();
 
-    // JWT Token Authentication
+    // JWT Token Authentication (primary method for game requests)
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
+      
+      console.log('🔐 Validating JWT token:', token.substring(0, 20) + '...');
+      
       const session = await auth.validateToken(token);
       
       if (session) {
+        console.log('✅ JWT authentication successful for address:', session.address);
         return { isAuthenticated: true, user: session };
       }
+      
+      console.log('❌ JWT token validation failed');
       return { isAuthenticated: false, error: 'Invalid or expired token' };
     }
 
-    // API Key Authentication
+    // API Key Authentication (for server-to-server requests)
     if (apiKeyHeader && signatureHeader && timestampHeader) {
       const [keyId, secretKey] = apiKeyHeader.split(':');
       if (!keyId || !secretKey) {
@@ -396,10 +428,13 @@ export async function authenticateRequest(request: NextRequest): Promise<{
           return { isAuthenticated: false, error: 'Invalid API key' };
         }
 
-        // Verify request signature
+        // For API key authentication, we need to clone the request to read body
+        // This prevents consuming the body for the actual API handler
+        const requestClone = request.clone();
+        const body = await requestClone.text();
+        
         const timestamp = parseInt(timestampHeader);
-        const body = await request.text();
-        const isValidSignature = auth.verifyRequestSignature(
+        const isValidSignature = await auth.verifyRequestSignature(
           request.method,
           request.nextUrl.pathname,
           body,
@@ -418,8 +453,10 @@ export async function authenticateRequest(request: NextRequest): Promise<{
       }
     }
 
+    console.log('❌ No authentication provided');
     return { isAuthenticated: false, error: 'No authentication provided' };
   } catch (error) {
+    console.error('❌ Authentication error:', error);
     return { isAuthenticated: false, error: 'Authentication error' };
   }
 }
