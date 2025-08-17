@@ -49,7 +49,8 @@
       "Bash(do echo \"Test $i:\")",
       "Bash(done)",
       "Bash(test-authentication-fix.bat)",
-      "Bash(./test-authentication-fix.bat)"
+      "Bash(./test-authentication-fix.bat)",
+      "WebSearch"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

@@ -5,6 +5,10 @@ import { getSecureContractManager } from '@/lib/secureContractManager';
 import { transactionMonitor } from '@/lib/transactionMonitor';
 import { securityAuditor } from '@/lib/securityAudit';
 import { z } from 'zod';
+import { poolBalanceCache, cache } from '@/lib/cacheManager';
+import { trackApiCall } from '@/lib/performance';
+import { Address, parseEther, formatEther } from 'viem';
+
 // Web Crypto API helpers for Edge Runtime compatibility
 async function createHash(algorithm: string, data: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -19,9 +23,6 @@ function randomBytes(size: number): string {
   crypto.getRandomValues(array);
   return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-import { poolBalanceCache, cache } from '@/lib/cacheManager';
-import { trackApiCall } from '@/lib/performance';
-import { Address, parseEther, formatEther } from 'viem';
 
 // Zod schema for payout validation
 const payoutSchema = z.object({
