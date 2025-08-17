@@ -87,7 +87,7 @@ export function CoinMasterSecureGame() {
     if (!result || result.length === 0) return '0x';
     
     // Count symbol occurrences
-    const symbolCounts = {};
+    const symbolCounts: {[key: string]: number} = {};
     result.forEach(symbol => {
       symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
     });

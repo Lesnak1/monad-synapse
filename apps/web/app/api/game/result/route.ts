@@ -10,7 +10,7 @@ import { addGameRecord } from '@/lib/gameStats';
 
 // Input validation schema
 const gameRequestSchema = z.object({
-  gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip', 'coin-master', 'roulette', 'blackjack', 'baccarat', 'keno', 'lottery', 'tower', 'spin-win', 'limbo']),
+  gameType: z.enum(['mines', 'dice', 'crash', 'slots', 'plinko', 'slide', 'diamonds', 'burning-wins', 'sweet-bonanza', 'coin-flip', 'coin-master', 'roulette', 'blackjack', 'baccarat', 'keno', 'lottery', 'tower', 'spin-win', 'limbo', 'wheel']),
   gameParams: z.object({
     betAmount: z.number().min(0.1).max(1000),
     clientSeed: z.string().min(8).max(64).regex(/^[a-zA-Z0-9]+$/),
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Check for wins with proper logic
-        const symbolCounts = {};
+        const symbolCounts: {[key: string]: number} = {};
         coinMasterReels.forEach(symbol => {
           symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
         });
@@ -323,20 +323,20 @@ export async function POST(request: NextRequest) {
         }
         
         // Simple win detection (count matching symbols)
-        const symbolCounts: {[key: string]: number} = {};
+        const bonanzaSymbolCounts: {[key: string]: number} = {};
         gridResults.forEach(symbol => {
-          symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
+          bonanzaSymbolCounts[symbol] = (bonanzaSymbolCounts[symbol] || 0) + 1;
         });
         
-        const maxCount = Math.max(...Object.values(symbolCounts));
-        isWin = maxCount >= 8; // Need 8+ matching symbols
-        const bonanzaMultiplier = maxCount >= 12 ? 5 : maxCount >= 10 ? 3 : maxCount >= 8 ? 2 : 0;
+        const bonanzaMaxCount = Math.max(...Object.values(bonanzaSymbolCounts));
+        isWin = bonanzaMaxCount >= 8; // Need 8+ matching symbols
+        const bonanzaMultiplier = bonanzaMaxCount >= 12 ? 5 : bonanzaMaxCount >= 10 ? 3 : bonanzaMaxCount >= 8 ? 2 : 0;
         winAmount = isWin ? gameParams.betAmount * bonanzaMultiplier : 0;
         
         gameResult = {
           grid,
-          symbolCounts,
-          maxCount,
+          symbolCounts: bonanzaSymbolCounts,
+          maxCount: bonanzaMaxCount,
           multiplier: bonanzaMultiplier,
           isWin
         };
@@ -432,20 +432,20 @@ export async function POST(request: NextRequest) {
       case 'wheel':
         // Roulette-style wheel with red, black, green
         const wheelRoll = gameRandom.dice(gameParams.clientSeed, gameParams.nonce);
-        const prediction = gameParams.prediction || 'red';
+        const wheelPrediction = gameParams.prediction || 'red';
         
         let wheelResult: string;
         let wheelMultiplier = 0;
         
         if (wheelRoll <= 2.7) { // ~2.7% chance for green (1/37)
           wheelResult = 'green';
-          wheelMultiplier = prediction === 'green' ? 14 : 0;
+          wheelMultiplier = wheelPrediction === 'green' ? 14 : 0;
         } else if (wheelRoll <= 51.35) { // ~48.65% chance for red (18/37)
           wheelResult = 'red';
-          wheelMultiplier = prediction === 'red' ? 2 : 0;
+          wheelMultiplier = wheelPrediction === 'red' ? 2 : 0;
         } else { // ~48.65% chance for black (18/37)
           wheelResult = 'black';
-          wheelMultiplier = prediction === 'black' ? 2 : 0;
+          wheelMultiplier = wheelPrediction === 'black' ? 2 : 0;
         }
         
         isWin = wheelMultiplier > 0;
@@ -453,7 +453,7 @@ export async function POST(request: NextRequest) {
         
         gameResult = {
           result: wheelResult,
-          prediction,
+          prediction: wheelPrediction,
           multiplier: wheelMultiplier,
           roll: wheelRoll,
           isWin

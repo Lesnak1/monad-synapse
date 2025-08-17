@@ -46,7 +46,7 @@ export function PlinkoSecureGame() {
             
             // Animate ball path if available
             if (plinkoData.path) {
-              setBallPath(plinkoData.path.split('').map(c => c === 'L' ? 0 : 1));
+              setBallPath(plinkoData.path.split('').map((c: string) => c === 'L' ? 0 : 1));
             }
             
             if (result.result.isWin && result.result.winAmount > 0) {
