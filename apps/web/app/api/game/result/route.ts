@@ -18,7 +18,7 @@ const gameRequestSchema = z.object({
     mines: z.number().int().min(1).max(24).optional(),
     targetNumber: z.number().min(1).max(99).optional(),
     multiplier: z.number().min(1.01).max(100).optional(),
-    prediction: z.enum(['under', 'over', 'heads', 'tails']).optional(),
+    prediction: z.enum(['under', 'over', 'heads', 'tails', 'red', 'black', 'green']).optional(),
     target: z.number().min(1).max(99).optional(),
   }),
   playerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
@@ -425,6 +425,37 @@ export async function POST(request: NextRequest) {
           matches: spinMatches,
           multiplier: spinMultiplier,
           winningLines: isWin ? [1] : [], // Middle line = index 1
+          isWin
+        };
+        break;
+
+      case 'wheel':
+        // Roulette-style wheel with red, black, green
+        const wheelRoll = gameRandom.dice(gameParams.clientSeed, gameParams.nonce);
+        const prediction = gameParams.prediction || 'red';
+        
+        let wheelResult: string;
+        let wheelMultiplier = 0;
+        
+        if (wheelRoll <= 2.7) { // ~2.7% chance for green (1/37)
+          wheelResult = 'green';
+          wheelMultiplier = prediction === 'green' ? 14 : 0;
+        } else if (wheelRoll <= 51.35) { // ~48.65% chance for red (18/37)
+          wheelResult = 'red';
+          wheelMultiplier = prediction === 'red' ? 2 : 0;
+        } else { // ~48.65% chance for black (18/37)
+          wheelResult = 'black';
+          wheelMultiplier = prediction === 'black' ? 2 : 0;
+        }
+        
+        isWin = wheelMultiplier > 0;
+        winAmount = isWin ? gameParams.betAmount * wheelMultiplier : 0;
+        
+        gameResult = {
+          result: wheelResult,
+          prediction,
+          multiplier: wheelMultiplier,
+          roll: wheelRoll,
           isWin
         };
         break;
