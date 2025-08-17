@@ -172,7 +172,7 @@ export function MinesSecureGame() {
             </div>
 
             <button
-              onClick={playMines}
+              onClick={!isAuthenticated ? authenticate : playMines}
               disabled={isLoading || isPlaying || !isConnected || isAuthenticating}
               className="w-full neon-button py-4 text-lg font-bold disabled:opacity-50"
             >

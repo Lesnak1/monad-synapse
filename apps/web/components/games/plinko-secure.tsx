@@ -126,7 +126,7 @@ export function PlinkoSecureGame() {
 
       {/* Drop Button */}
       <button
-        onClick={dropBall}
+        onClick={!isAuthenticated ? authenticate : dropBall}
         disabled={!isConnected || isDropping || isLoading || isAuthenticating}
         className={`w-full neon-button py-4 text-lg font-bold ${
           (!isConnected || isDropping || isLoading || isAuthenticating) ? 'opacity-50 cursor-not-allowed' : ''

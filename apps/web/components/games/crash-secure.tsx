@@ -143,7 +143,7 @@ export function CrashSecureGame() {
             </div>
 
             <button
-              onClick={playCrash}
+              onClick={!isAuthenticated ? authenticate : playCrash}
               disabled={isLoading || isPlaying || !isConnected || isAuthenticating}
               className="w-full neon-button py-4 text-lg font-bold disabled:opacity-50"
             >

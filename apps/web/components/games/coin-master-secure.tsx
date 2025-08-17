@@ -160,7 +160,7 @@ export function CoinMasterSecureGame() {
 
       {/* Spin Button */}
       <button
-        onClick={spin}
+        onClick={!isAuthenticated ? authenticate : spin}
         disabled={!isConnected || isSpinning || isLoading || isAuthenticating}
         className={`w-full neon-button py-4 text-lg font-bold ${
           (!isConnected || isSpinning || isLoading || isAuthenticating) ? 'opacity-50 cursor-not-allowed' : ''

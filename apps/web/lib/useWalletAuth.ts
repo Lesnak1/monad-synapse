@@ -15,11 +15,34 @@ export function useWalletAuth() {
   useEffect(() => {
     const storedToken = localStorage.getItem('authToken');
     const storedAddress = localStorage.getItem('authAddress');
+    const storedExpiry = localStorage.getItem('authExpiry');
+    
+    console.log('🔍 Auth check:', {
+      hasToken: !!storedToken,
+      storedAddress,
+      currentAddress: address,
+      isConnected,
+      expiry: storedExpiry ? new Date(parseInt(storedExpiry)).toISOString() : 'none',
+      isExpired: storedExpiry ? Date.now() > parseInt(storedExpiry) : true
+    });
     
     if (storedToken && storedAddress === address && isConnected) {
-      setAuthToken(storedToken);
-      setIsAuthenticated(true);
-      console.log('🔓 Using existing auth token for:', address);
+      // Check if token is expired
+      if (storedExpiry && Date.now() > parseInt(storedExpiry)) {
+        console.log('🕐 Token expired, clearing...');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authAddress');
+        localStorage.removeItem('authExpiry');
+        setAuthToken(null);
+        setIsAuthenticated(false);
+      } else {
+        setAuthToken(storedToken);
+        setIsAuthenticated(true);
+        console.log('🔓 Using existing auth token for:', address);
+      }
+    } else {
+      console.log('❌ No valid token found or address mismatch');
+      setIsAuthenticated(false);
     }
   }, [address, isConnected]);
 
@@ -103,12 +126,13 @@ export function useWalletAuth() {
     }
   }, [address, isConnected, signMessageAsync, isAuthenticating]);
 
-  // Auto-authenticate when wallet connects
-  useEffect(() => {
-    if (isConnected && address && !isAuthenticated && !isAuthenticating) {
-      authenticate();
-    }
-  }, [isConnected, address, isAuthenticated, isAuthenticating, authenticate]);
+  // Auto-authenticate when wallet connects (disabled for manual control)
+  // useEffect(() => {
+  //   if (isConnected && address && !isAuthenticated && !isAuthenticating) {
+  //     console.log('🔄 Auto-authenticating...');
+  //     authenticate();
+  //   }
+  // }, [isConnected, address, isAuthenticated, isAuthenticating, authenticate]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('authToken');

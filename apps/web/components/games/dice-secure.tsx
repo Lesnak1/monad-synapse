@@ -194,7 +194,7 @@ export function DiceSecureGame() {
 
       {/* Roll Button */}
       <button
-        onClick={rollDice}
+        onClick={!isAuthenticated ? authenticate : rollDice}
         disabled={!isConnected || isRolling || isLoading || isAuthenticating}
         className={`w-full neon-button py-4 text-lg font-bold ${
           (!isConnected || isRolling || isLoading || isAuthenticating) ? 'opacity-50 cursor-not-allowed' : ''
