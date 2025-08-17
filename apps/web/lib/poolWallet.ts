@@ -61,11 +61,13 @@ if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
   }
 }
 
-const PUBLIC_POOL_ADDRESS = (process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS || '').trim() as `0x${string}` | '';
+// Use env variable or fallback to development address
+const ENV_POOL_ADDRESS = process.env.NEXT_PUBLIC_POOL_WALLET_ADDRESS?.trim() as `0x${string}` | undefined;
+const FALLBACK_POOL_ADDRESS = '0x9E0Bf7657Cc7C6416aDC581F22bBbB8111884712' as `0x${string}`;
+export const POOL_WALLET_ADDRESS = ENV_POOL_ADDRESS || FALLBACK_POOL_ADDRESS;
 
-// Fallback for development (production uses secure wallet)
-const FALLBACK_POOL_ADDRESS = '0x1234567890123456789012345678901234567890' as `0x${string}`;
-export const POOL_WALLET_ADDRESS = PUBLIC_POOL_ADDRESS || FALLBACK_POOL_ADDRESS;
+// For balance checking, use the actual address
+const PUBLIC_POOL_ADDRESS = POOL_WALLET_ADDRESS as `0x${string}`;
 
 // Create multiple clients for failover
 export const publicClient = createPublicClient({

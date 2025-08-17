@@ -127,12 +127,19 @@ export function useWalletAuth() {
   }, [address, isConnected, signMessageAsync, isAuthenticating]);
 
   // Auto-authenticate when wallet connects (disabled for manual control)
-  // useEffect(() => {
-  //   if (isConnected && address && !isAuthenticated && !isAuthenticating) {
-  //     console.log('🔄 Auto-authenticating...');
-  //     authenticate();
-  //   }
-  // }, [isConnected, address, isAuthenticated, isAuthenticating, authenticate]);
+  // Auto-authenticate when wallet connects and token is expired/missing
+  useEffect(() => {
+    if (isConnected && address && !isAuthenticated && !isAuthenticating) {
+      const storedToken = localStorage.getItem('authToken');
+      const storedExpiry = localStorage.getItem('authExpiry');
+      
+      // Only auto-authenticate if no valid token exists
+      if (!storedToken || !storedExpiry || Date.now() > parseInt(storedExpiry)) {
+        console.log('🔄 Auto-authenticating due to missing/expired token...');
+        authenticate();
+      }
+    }
+  }, [isConnected, address, isAuthenticated, isAuthenticating, authenticate]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('authToken');

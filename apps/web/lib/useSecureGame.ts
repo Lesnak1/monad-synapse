@@ -104,7 +104,7 @@ export function useSecureGame() {
 
       // Production authentication required
       if (!authToken) {
-        throw new Error('Authentication required - Please connect wallet and sign message to play games');
+        throw new Error('🔐 Authentication required. Please click "SIGN TO PLAY" to authenticate your wallet.');
       }
 
       const headers: Record<string, string> = {
@@ -134,18 +134,26 @@ export function useSecureGame() {
           url: response.url
         });
         
-        // Log specific error details for debugging
+        // Provide user-friendly error messages
+        let userMessage = '';
         if (response.status === 401) {
           console.error('🔒 Authentication error - token may be expired or invalid');
           console.error('🔑 Current auth token:', getAuthToken()?.substring(0, 20) + '...');
+          userMessage = '🔐 Your session has expired. Please click "SIGN TO PLAY" to authenticate again.';
         } else if (response.status === 400) {
           console.error('📝 Validation error - check game parameters');
           console.error('🎮 Game params sent:', fullGameParams);
+          userMessage = '❌ Invalid bet amount or game parameters. Please check your input.';
         } else if (response.status === 500) {
           console.error('💥 Server error - check API endpoint');
+          userMessage = '🚫 Game server temporarily unavailable. Please try again in a moment.';
+        } else if (response.status === 503) {
+          userMessage = '🛡️ Security check in progress. Please wait a moment and try again.';
+        } else {
+          userMessage = errorData.error?.message || errorData.message || '❌ Game request failed. Please try again.';
         }
         
-        throw new Error(errorData.error?.message || errorData.message || `Game request failed with status ${response.status}`);
+        throw new Error(userMessage);
       }
 
       const gameResult: GameResult = await response.json();
